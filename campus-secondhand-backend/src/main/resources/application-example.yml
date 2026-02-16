@@ -1,0 +1,44 @@
+server:
+  port: 18081
+  tomcat:
+    max-http-form-post-size: -1
+    max-swallow-size: -1
+    accesslog:
+      enabled: true
+      directory: logs
+      rotate: true
+      prefix: access_log
+      suffix: .log
+      pattern: '%h %l %u %t "%r" %s %b %D'
+
+spring:
+  application:
+    name: campus-secondhand-backend
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/campus_trade?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: YOUR_MYSQL_USERNAME
+    password: YOUR_MYSQL_PASSWORD
+  servlet:
+    multipart:
+      max-file-size: 4GB
+      max-request-size: 4GB
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+
+app:
+  jwt:
+    secret: "CHANGE_ME_CHANGE_ME_CHANGE_ME_CHANGE_ME_CHANGE_ME_32_BYTES_MIN"
+    expire-seconds: 604800
+  upload:
+    dir: uploads
+    max-bytes: 4294967296
+    chunk-max-bytes: 33554432
+  cleanup:
+    cron: "0 */10 * * * *"          # 每10分钟跑一次
+    chunk-ttl-seconds: 21600        # 分片上传目录超过6小时没动就删
+    temp-ttl-seconds: 21600         # *.uploading 超过6小时就删
+    orphan-min-age-seconds: 3600    # uploads 里孤儿文件至少存活1小时才允许删除
+    max-delete-per-run: 200

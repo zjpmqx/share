@@ -1,0 +1,109 @@
+CREATE DATABASE IF NOT EXISTS campus_trade DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+USE campus_trade;
+
+CREATE TABLE IF NOT EXISTS t_user (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  username VARCHAR(64) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  phone VARCHAR(32) NULL,
+  role VARCHAR(32) NOT NULL DEFAULT 'USER',
+  avatar_url VARCHAR(512) NULL,
+  real_name VARCHAR(64) NULL,
+  student_no VARCHAR(64) NULL,
+  id_verified TINYINT NOT NULL DEFAULT 0,
+  rating_score DECIMAL(4,2) NOT NULL DEFAULT 0.00,
+  rating_count INT NOT NULL DEFAULT 0,
+  status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+  last_login_ip VARCHAR(64) NULL,
+  last_login_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_item (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  seller_id BIGINT NOT NULL,
+  title VARCHAR(128) NOT NULL,
+  description TEXT NULL,
+  category VARCHAR(64) NOT NULL,
+  price DECIMAL(10,2) NOT NULL,
+  condition_level VARCHAR(32) NOT NULL,
+  cover_image_url VARCHAR(512) NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'PENDING_REVIEW',
+  audit_reason VARCHAR(255) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_item_seller_id (seller_id),
+  INDEX idx_item_status (status),
+  INDEX idx_item_category (category),
+  FULLTEXT INDEX idx_item_search (title, description)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_item_image (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  item_id BIGINT NOT NULL,
+  url VARCHAR(512) NOT NULL,
+  sort_no INT NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_item_image_item_id (item_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_item_message (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  item_id BIGINT NOT NULL,
+  from_user_id BIGINT NOT NULL,
+  content VARCHAR(1000) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_item_message_item_id (item_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_order (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  item_id BIGINT NOT NULL,
+  buyer_id BIGINT NOT NULL,
+  seller_id BIGINT NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'PENDING_PAYMENT',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_order_item_id (item_id),
+  INDEX idx_order_buyer_id (buyer_id),
+  INDEX idx_order_seller_id (seller_id),
+  INDEX idx_order_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_user_review (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  order_id BIGINT NOT NULL,
+  from_user_id BIGINT NOT NULL,
+  to_user_id BIGINT NOT NULL,
+  score INT NOT NULL,
+  content VARCHAR(1000) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_review_order_from (order_id, from_user_id),
+  INDEX idx_review_to_user_id (to_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_share_post (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  title VARCHAR(128) NOT NULL,
+  content TEXT NULL,
+  media_type VARCHAR(16) NOT NULL DEFAULT 'NONE',
+  media_url VARCHAR(512) NULL,
+  link_url VARCHAR(512) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_share_post_user_id (user_id),
+  INDEX idx_share_post_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_share_comment (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  share_id BIGINT NOT NULL,
+  user_id BIGINT NOT NULL,
+  content VARCHAR(1000) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_share_comment_share_id (share_id),
+  INDEX idx_share_comment_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

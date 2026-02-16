@@ -1,0 +1,41 @@
+# Java
+*.class
+*.log
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+target/
+BOOT-INF/
+!.mvn/wrapper/maven-wrapper.jar
+.idea/
+*.iml
+.vscode/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+.DS_Store
+
+# 上传文件
+campus-secondhand-backend/uploads/
+
+# 编译输出
+campus-secondhand-backend/target/
+campus-secondhand-web/dist/
+
+# 日志文件
+campus-secondhand-backend/logs/
+
+# 敏感配置文件
+campus-secondhand-backend/src/main/resources/application.yml
+campus-secondhand-backend/BOOT-INF/classes/application.yml
+
+# 运行代码文件
+campus-secondhand-backend/运行代码.txt
+前端启动代码.txt
