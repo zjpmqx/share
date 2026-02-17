@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { cancelOrder, confirmOrder, createOrder, getItem, listMessages, me, payOrder, postMessage, shipOrder } from '../services/api'
 import { getToken } from '../services/auth'
+import { ElMessage } from 'element-plus'
 
 const route = useRoute()
 
@@ -12,8 +13,6 @@ const msgLoading = ref(false)
 const messages = ref([])
 const content = ref('')
 
-const msgError = ref('')
-const orderError = ref('')
 const posting = ref(false)
 const ordering = ref(false)
 
@@ -37,6 +36,8 @@ async function loadItem() {
   try {
     const resp = await getItem(route.params.id)
     item.value = resp.data
+  } catch (e) {
+    ElMessage.error('加载商品信息失败')
   } finally {
     loading.value = false
   }
@@ -47,34 +48,40 @@ async function loadMessages() {
   try {
     const resp = await listMessages(route.params.id)
     messages.value = resp.data || []
+  } catch {
   } finally {
     msgLoading.value = false
   }
 }
 
 async function sendMessage() {
-  if (!content.value.trim()) return
-  msgError.value = ''
+  if (!content.value.trim()) {
+    ElMessage.warning('请输入留言内容')
+    return
+  }
   posting.value = true
   try {
     await postMessage(route.params.id, { content: content.value })
     content.value = ''
+    ElMessage.success('留言发送成功')
     await loadMessages()
   } catch (e) {
-    msgError.value = e?.response?.data?.message || e?.message || '发送失败'
+    const errMsg = e?.response?.data?.message || e?.message || '发送失败'
+    ElMessage.error(errMsg)
   } finally {
     posting.value = false
   }
 }
 
 async function orderCreate() {
-  orderError.value = ''
   ordering.value = true
   try {
     await createOrder({ itemId: Number(route.params.id) })
+    ElMessage.success('下单成功！')
     await loadItem()
   } catch (e) {
-    orderError.value = e?.response?.data?.message || e?.message || '下单失败'
+    const errMsg = e?.response?.data?.message || e?.message || '下单失败'
+    ElMessage.error(errMsg)
   } finally {
     ordering.value = false
   }
@@ -87,71 +94,150 @@ onMounted(async () => {
 
 <template>
   <div class="page">
-    <div v-if="loading">加载中...</div>
+    <el-skeleton v-if="loading" :rows="10" animated />
 
     <div v-else-if="item" class="layout">
       <div class="left">
-        <div class="card media">
+        <el-card class="mediaCard" shadow="hover">
           <div class="mediaBox">
-            <img v-if="item.coverImageUrl" :src="item.coverImageUrl" alt="" loading="lazy" />
+            <el-image
+              v-if="item.coverImageUrl"
+              :src="item.coverImageUrl"
+              fit="contain"
+              :preview-src-list="[item.coverImageUrl]"
+              lazy
+            />
+            <el-empty v-else description="暂无图片" :image-size="100" />
           </div>
-        </div>
+        </el-card>
       </div>
 
       <div class="right">
-        <div class="card">
+        <el-card class="infoCard" shadow="hover">
           <div class="head">
             <h1 class="title">{{ item.title }}</h1>
-            <div class="price">￥{{ item.price }}</div>
+            <div class="price">
+              <span class="priceSymbol">¥</span>{{ item.price }}
+            </div>
           </div>
 
           <div class="meta">
-            <span class="chip">{{ item.category }}</span>
-            <span class="chip">成色 {{ item.conditionLevel }}</span>
-            <span class="chip">{{ item.status }}</span>
+            <el-tag size="small" type="info">{{ item.category }}</el-tag>
+            <el-tag size="small" type="success">成色 {{ item.conditionLevel }}</el-tag>
+            <el-tag size="small" type="warning">{{ item.status }}</el-tag>
           </div>
 
-          <div class="desc">{{ item.description || '（无描述）' }}</div>
+          <el-divider />
+
+          <div class="desc">
+            <h3 class="descTitle">
+              <el-icon><Document /></el-icon>
+              商品描述
+            </h3>
+            <p>{{ item.description || '（暂无描述）' }}</p>
+          </div>
+
+          <el-divider />
 
           <div class="actions">
-            <button class="primary" type="button" :disabled="!getToken() || ordering || item.status !== 'ON_SALE'" @click="orderCreate">
-              下单
-            </button>
-            <div v-if="!getToken()" class="hint">提示：请先登录后下单。</div>
-            <div v-else-if="item.status !== 'ON_SALE'" class="hint">提示：商品正在审核或暂不可购买。</div>
-            <div v-else class="hint">提示：下单后商品会被锁定，卖家发货后买家确认收货完成交易。</div>
-            <div v-if="orderError" class="error">{{ orderError }}</div>
+            <el-button
+              type="primary"
+              size="large"
+              :disabled="!getToken() || ordering || item.status !== 'ON_SALE'"
+              :loading="ordering"
+              @click="orderCreate"
+            >
+              <el-icon><ShoppingCart /></el-icon>
+              立即下单
+            </el-button>
+            
+            <div class="hints">
+              <el-alert
+                v-if="!getToken()"
+                title="提示：请先登录后下单"
+                type="warning"
+                :closable="false"
+                show-icon
+                size="small"
+              />
+              <el-alert
+                v-else-if="item.status !== 'ON_SALE'"
+                title="提示：商品正在审核或暂不可购买"
+                type="info"
+                :closable="false"
+                show-icon
+                size="small"
+              />
+              <el-alert
+                v-else
+                title="提示：下单后商品会被锁定，卖家发货后买家确认收货完成交易"
+                type="info"
+                :closable="false"
+                show-icon
+                size="small"
+              />
+            </div>
           </div>
-        </div>
+        </el-card>
 
-        <div class="card" style="margin-top: 12px;">
-          <h2 class="sub">留言</h2>
+        <el-card class="messageCard" shadow="hover" style="margin-top: 14px;">
+          <template #header>
+            <div class="cardHeader">
+              <el-icon><ChatDotRound /></el-icon>
+              <span>商品留言</span>
+            </div>
+          </template>
 
-          <div v-if="msgLoading">加载留言中...</div>
+          <div v-if="msgLoading" class="msgLoading">
+            <el-skeleton :rows="3" animated />
+          </div>
+          
           <div v-else class="msgs">
             <div v-for="m in messages" :key="m.id" class="msg">
               <div class="msgHead">
-                <div class="avatar">
+                <el-avatar :size="32">
                   <img v-if="m.avatarUrl" :src="m.avatarUrl" alt="" />
-                  <div v-else class="avatarFallback"></div>
-                </div>
+                  <template v-else>
+                    <el-icon><User /></el-icon>
+                  </template>
+                </el-avatar>
                 <div class="who">{{ m.userName || ('用户' + (m.fromUserId || '')) }}</div>
+                <div class="msgTime">{{ m.createdAt || '' }}</div>
               </div>
               <div class="msgContent">{{ m.content }}</div>
-              <div class="msgTime">{{ m.createdAt || '' }}</div>
             </div>
-            <div v-if="messages.length === 0" class="empty">暂无留言</div>
+            
+            <el-empty v-if="messages.length === 0" description="暂无留言" :image-size="60" />
           </div>
 
           <div class="composer">
-            <input v-model="content" class="input" placeholder="说点什么..." />
-            <button class="primary" type="button" :disabled="!getToken() || posting" @click="sendMessage">
-              {{ posting ? '发送中...' : '发送' }}
-            </button>
+            <el-input
+              v-model="content"
+              type="textarea"
+              :rows="2"
+              placeholder="说点什么..."
+              resize="none"
+            />
+            <el-button
+              type="primary"
+              :disabled="!getToken() || posting"
+              :loading="posting"
+              @click="sendMessage"
+            >
+              发送
+            </el-button>
           </div>
-          <div v-if="!getToken()" class="hint">登录后才能留言</div>
-          <div v-if="msgError" class="error" style="margin-top: 8px;">{{ msgError }}</div>
-        </div>
+          
+          <el-alert
+            v-if="!getToken()"
+            title="登录后才能留言"
+            type="warning"
+            :closable="false"
+            show-icon
+            size="small"
+            style="margin-top: 10px;"
+          />
+        </el-card>
       </div>
     </div>
   </div>
@@ -170,14 +256,17 @@ onMounted(async () => {
   }
 }
 
-.media {
+.mediaCard {
   overflow: hidden;
 }
 
 .mediaBox {
   width: 100%;
   height: 420px;
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(99, 102, 241, 0.10));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(99, 102, 241, 0.06));
 }
 
 @media (max-width: 900px) {
@@ -192,19 +281,9 @@ onMounted(async () => {
   }
 }
 
-.mediaBox img {
+.mediaBox :deep(.el-image) {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  display: block;
-}
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border-2);
-  border-radius: var(--radius);
-  padding: 14px;
-  box-shadow: var(--shadow-sm);
 }
 
 .head {
@@ -212,93 +291,86 @@ onMounted(async () => {
   align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .title {
-  font-size: 20px;
+  font-size: 22px;
   margin: 0;
+  font-weight: 700;
+  flex: 1;
+  min-width: 200px;
 }
 
 .price {
-  font-size: 22px;
+  font-size: 28px;
   font-weight: 800;
   color: #ef4444;
+  white-space: nowrap;
+}
+
+.priceSymbol {
+  font-size: 18px;
 }
 
 .meta {
-  margin: 10px 0;
+  margin: 12px 0;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
-  color: var(--muted);
-  font-size: 13px;
 }
 
-.desc {
-  padding: 10px 0;
-  line-height: 1.6;
+.descTitle {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.desc p {
+  margin: 0;
+  line-height: 1.7;
+  color: var(--text);
 }
 
 .actions {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 12px;
-  flex-wrap: wrap;
 }
 
-@media (max-width: 520px) {
-  .actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .actions .primary {
-    width: 100%;
-  }
+.hints {
+  width: 100%;
 }
 
-.primary {
-  background: var(--primary);
-  color: #fff;
-  border: 0;
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background-color 0.15s ease, transform 0.15s ease;
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
 }
 
-.primary:hover {
-  background: var(--primary-hover);
-  transform: translateY(-1px);
-}
-
-.hint {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.error {
-  font-size: 13px;
-  color: var(--danger);
-}
-
-.sub {
-  margin: 0 0 10px;
-  font-size: 16px;
+.msgLoading {
+  padding: 10px 0;
 }
 
 .msgs {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 12px;
+  margin-bottom: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .msg {
   background: var(--surface-2);
   border: 1px solid var(--border-2);
   border-radius: 12px;
-  padding: 10px;
+  padding: 12px;
 }
 
 .msgHead {
@@ -306,71 +378,44 @@ onMounted(async () => {
   align-items: center;
   gap: 10px;
   margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 
 .who {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  overflow: hidden;
-  border: 1px solid var(--border-2);
-  background: var(--surface);
-  flex: 0 0 auto;
-}
-
-.avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.avatarFallback {
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(34, 197, 94, 0.18));
-}
-
-.msgContent {
   font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
 }
 
 .msgTime {
   font-size: 12px;
   color: var(--muted-2);
-  margin-top: 6px;
+  margin-left: auto;
 }
 
-.empty {
-  color: var(--muted);
-  font-size: 13px;
+.msgContent {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
 }
 
 .composer {
   display: flex;
   gap: 10px;
+  align-items: flex-end;
 }
 
 @media (max-width: 520px) {
   .composer {
     flex-direction: column;
   }
-
-  .composer .primary {
+  
+  .composer .el-button {
     width: 100%;
   }
 }
 
-.input {
+.composer :deep(.el-textarea) {
   flex: 1;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  background: var(--surface);
 }
 </style>

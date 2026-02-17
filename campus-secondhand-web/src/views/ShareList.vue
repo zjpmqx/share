@@ -1,10 +1,22 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { listShares } from '../services/api'
+import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
 const errorMsg = ref('')
 const shares = ref([])
+const searchKeyword = ref('')
+const filterType = ref('')
+
+const mediaTypes = [
+  { value: '', label: '全部类型' },
+  { value: 'NONE', label: '纯文字' },
+  { value: 'IMAGE', label: '图片' },
+  { value: 'VIDEO', label: '视频' },
+  { value: 'URL', label: '链接' },
+  { value: 'FILE', label: '文件' }
+]
 
 const COVER_RE = /\[\[cover:([^\]]+)\]\]/g
 
@@ -34,16 +46,30 @@ async function load() {
   errorMsg.value = ''
   try {
     const resp = await listShares({ page: 0, size: 30 })
-    const next = (resp.data || []).map((it) => {
+    let next = (resp.data || []).map((it) => {
       const parts = parseShareContent(it?.content)
       return { ...it, _cover: parts.cover, _text: parts.text }
     })
+    
+    if (filterType.value) {
+      next = next.filter(it => it.mediaType === filterType.value)
+    }
+    
+    if (searchKeyword.value.trim()) {
+      const kw = searchKeyword.value.toLowerCase()
+      next = next.filter(it => 
+        it.title.toLowerCase().includes(kw) || 
+        it._text.toLowerCase().includes(kw)
+      )
+    }
+    
     if (!isSameList(shares.value, next)) {
       shares.value = next
     }
   } catch (e) {
     shares.value = []
     errorMsg.value = e?.response?.data?.message || e?.message || '加载失败'
+    ElMessage.error(errorMsg.value)
   } finally {
     loading.value = false
   }
@@ -65,6 +91,28 @@ function coverPreview(it) {
   return it._cover
 }
 
+function getTypeIcon(type) {
+  const t = (type || 'NONE').toUpperCase()
+  switch (t) {
+    case 'IMAGE': return 'Picture'
+    case 'VIDEO': return 'VideoCamera'
+    case 'URL': return 'Link'
+    case 'FILE': return 'Document'
+    default: return 'Document'
+  }
+}
+
+function getTypeTagType(type) {
+  const t = (type || 'NONE').toUpperCase()
+  switch (t) {
+    case 'IMAGE': return 'success'
+    case 'VIDEO': return 'warning'
+    case 'URL': return 'primary'
+    case 'FILE': return 'danger'
+    default: return 'info'
+  }
+}
+
 onMounted(() => {
   load()
 })
@@ -74,52 +122,98 @@ onMounted(() => {
   <div class="page">
     <div class="head">
       <div>
-        <div class="title">好物分享</div>
+        <div class="title">
+          <el-icon><ChatLineSquare /></el-icon>
+          好物分享
+        </div>
         <div class="sub">免费无私分享：图片 / 视频 / 链接，也可以在下方留言交流。</div>
       </div>
 
-      <RouterLink class="primary" to="/shares/publish">发布分享</RouterLink>
+      <router-link class="publishBtn" to="/shares/publish">
+        <el-icon><Plus /></el-icon>
+        发布分享
+      </router-link>
     </div>
 
-    <div v-if="errorMsg" class="error">{{ errorMsg }}</div>
+    <el-card class="filterCard" shadow="never">
+      <div class="filters">
+        <el-input
+          v-model="searchKeyword"
+          placeholder="搜索分享..."
+          :prefix-icon="Search"
+          clearable
+          style="width: 280px;"
+          @keyup.enter="load"
+        />
+        <el-select v-model="filterType" placeholder="选择类型" clearable style="width: 160px;">
+          <el-option v-for="type in mediaTypes" :key="type.value" :label="type.label" :value="type.value" />
+        </el-select>
+        <el-button type="primary" :icon="Search" @click="load">搜索</el-button>
+      </div>
+    </el-card>
 
-    <div v-if="loading && shares.length === 0" class="muted">加载中...</div>
+    <el-skeleton v-if="loading && shares.length === 0" :rows="8" animated style="margin-top: 14px;" />
 
     <div v-else class="grid">
-      <RouterLink v-for="it in shares" :key="it.id" class="card" :to="`/shares/${it.id}`">
-        <div class="media">
-          <img v-if="coverPreview(it)" :src="coverPreview(it)" alt="" loading="lazy" />
-          <img v-else-if="previewKind(it) === 'image'" :src="it.mediaUrl" alt="" loading="lazy" />
-          <video v-else-if="previewKind(it) === 'video'" :src="it.mediaUrl" muted playsinline />
-          <div v-else-if="previewKind(it) === 'link'" class="linkBox">{{ it.linkUrl }}</div>
-          <div v-else class="emptyMedia">暂无媒体</div>
-        </div>
-
-        <div class="body">
-          <div class="cardTitle">{{ it.title }}</div>
-          <div v-if="it._text" class="desc">{{ it._text }}</div>
-          <a
-            v-if="previewKind(it) === 'file'"
-            class="fileBtn"
-            :href="it.mediaUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            :download="(it?.mediaUrl || '').split('/').pop() || 'attachment'"
-            @click.stop
-          >
-            下载附件
-          </a>
-          <div class="meta">
-            <span class="chip">{{ it.mediaType || 'NONE' }}</span>
-            <span class="chip">ID {{ it.id }}</span>
+      <router-link v-for="it in shares" :key="it.id" class="card" :to="`/shares/${it.id}`">
+        <el-card :body-style="{ padding: '0' }" class="cardInner" shadow="hover">
+          <div class="media">
+            <div v-if="coverPreview(it)" class="mediaContent">
+              <el-image :src="coverPreview(it)" fit="cover" lazy />
+            </div>
+            <div v-else-if="previewKind(it) === 'image'" class="mediaContent">
+              <el-image :src="it.mediaUrl" fit="cover" lazy />
+            </div>
+            <div v-else-if="previewKind(it) === 'video'" class="mediaContent">
+              <video :src="it.mediaUrl" muted playsinline />
+              <div class="videoOverlay">
+                <el-icon class="playIcon"><VideoPlay /></el-icon>
+              </div>
+            </div>
+            <div v-else-if="previewKind(it) === 'link'" class="linkBox">
+              <el-icon class="linkIcon"><Link /></el-icon>
+              <div class="linkText">{{ it.linkUrl }}</div>
+            </div>
+            <div v-else class="emptyMedia">
+              <el-icon><Document /></el-icon>
+            </div>
           </div>
-        </div>
-      </RouterLink>
+
+          <div class="body">
+            <div class="cardTitle">{{ it.title }}</div>
+            <div v-if="it._text" class="desc">{{ it._text }}</div>
+            
+            <a
+              v-if="previewKind(it) === 'file'"
+              class="fileBtn"
+              :href="it.mediaUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              :download="(it?.mediaUrl || '').split('/').pop() || 'attachment'"
+              @click.stop
+            >
+              <el-icon><Download /></el-icon>
+              下载附件
+            </a>
+            
+            <div class="meta">
+              <el-tag size="small" :type="getTypeTagType(it.mediaType)">
+                <el-icon><component :is="getTypeIcon(it.mediaType)" /></el-icon>
+                {{ it.mediaType || 'NONE' }}
+              </el-tag>
+              <el-tag size="small" type="info">ID {{ it.id }}</el-tag>
+            </div>
+          </div>
+        </el-card>
+      </router-link>
     </div>
 
     <div v-if="!loading && shares.length === 0" class="empty">
-      <div class="emptyTitle">暂无分享</div>
-      <div class="emptySub">去发布第一个好物分享吧。</div>
+      <el-empty description="暂无分享">
+        <router-link to="/shares/publish">
+          <el-button type="primary">去发布第一个分享</el-button>
+        </router-link>
+      </el-empty>
     </div>
   </div>
 </template>
@@ -131,11 +225,15 @@ onMounted(() => {
   align-items: flex-end;
   gap: 12px;
   margin: 6px 0 14px;
+  flex-wrap: wrap;
 }
 
 .title {
   font-size: 22px;
   font-weight: 900;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .sub {
@@ -144,24 +242,35 @@ onMounted(() => {
   font-size: 13px;
 }
 
-.primary {
+.publishBtn {
   background: var(--primary);
   color: #fff;
   border: 0;
-  padding: 10px 14px;
+  padding: 10px 18px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  transition: background-color 0.15s ease, transform 0.15s ease;
 }
 
-.error {
-  margin: 10px 0 12px;
-  padding: 10px 12px;
-  background: rgba(185, 28, 28, 0.08);
-  border: 1px solid rgba(185, 28, 28, 0.18);
-  border-radius: var(--radius);
-  color: var(--danger);
-  font-size: 13px;
+.publishBtn:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.filterCard {
+  margin-bottom: 14px;
+}
+
+.filters {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .grid {
@@ -180,24 +289,31 @@ onMounted(() => {
   .grid {
     grid-template-columns: 1fr;
   }
+  
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .filters .el-input,
+  .filters .el-select {
+    width: 100% !important;
+  }
 }
 
 .card {
   display: block;
-  background: var(--surface);
-  border: 1px solid var(--border-2);
-  border-radius: var(--radius);
-  overflow: hidden;
   text-decoration: none;
   color: inherit;
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
-.card:hover {
+.cardInner {
+  height: 100%;
+  transition: transform 0.15s ease;
+}
+
+.cardInner:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow);
-  border-color: var(--border);
 }
 
 .media {
@@ -207,36 +323,76 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  overflow: hidden;
 }
 
-.media img,
-.media video {
+.mediaContent {
+  width: 100%;
+  height: 100%;
+}
+
+.mediaContent :deep(.el-image) {
+  width: 100%;
+  height: 100%;
+}
+
+.mediaContent video {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
+.videoOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.playIcon {
+  font-size: 48px;
+  color: #fff;
+}
+
 .linkBox {
-  padding: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.linkIcon {
+  font-size: 40px;
+  color: var(--primary);
+}
+
+.linkText {
   font-size: 12px;
   color: var(--muted);
   word-break: break-all;
+  max-width: 100%;
 }
 
 .emptyMedia {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 40px;
 }
 
 .body {
-  padding: 12px;
+  padding: 14px;
 }
 
 .cardTitle {
-  font-weight: 900;
+  font-weight: 800;
   margin-bottom: 8px;
   line-height: 1.35;
+  font-size: 15px;
 }
 
 .desc {
@@ -253,45 +409,33 @@ onMounted(() => {
 
 .meta {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.chip {
-  background: var(--surface-2);
-  border: 1px solid var(--border-2);
-  padding: 4px 8px;
-  border-radius: 999px;
+  align-items: center;
 }
 
 .fileBtn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin: 6px 0 10px;
-  padding: 6px 10px;
+  padding: 6px 12px;
   border-radius: 999px;
   border: 1px solid var(--border-2);
   background: var(--surface-2);
   color: var(--primary);
   font-size: 12px;
   text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.fileBtn:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
 }
 
 .empty {
   margin-top: 18px;
-  text-align: center;
-  padding: 18px 12px;
-  color: var(--muted);
-}
-
-.emptyTitle {
-  font-weight: 800;
-  color: var(--text);
-  margin-bottom: 4px;
-}
-
-.emptySub {
-  font-size: 13px;
 }
 </style>

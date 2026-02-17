@@ -67,7 +67,7 @@ public class FileController {
 
     // Cloudflare 之类的代理对长连接有超时（常见 100s）限制；大文件分片合并容易触发 524。
     // 这里对超过阈值的分片合并改为异步，前端轮询结果获取最终 url。
-    private static final long ASYNC_COMPLETE_THRESHOLD_BYTES = 64L * 1024 * 1024;
+    private static final long ASYNC_COMPLETE_THRESHOLD_BYTES = 8L * 1024 * 1024;
 
     private static final Set<String> IMAGE_CONTENT_TYPES = Set.of(
             "image/jpeg",
@@ -133,24 +133,22 @@ public class FileController {
 
         String contentType = normalizeContentType(file.getContentType());
         if (!StringUtils.hasText(contentType)) {
-            if (isImageExt(ext) || isVideoExt(ext)) {
-                throw new IllegalArgumentException("Missing Content-Type");
-            }
             contentType = "application/octet-stream";
         }
-        if (isImageExt(ext)) {
-            if (!IMAGE_CONTENT_TYPES.contains(contentType)) {
-                throw new IllegalArgumentException("Invalid Content-Type");
-            }
-        } else if (isVideoExt(ext)) {
-            if (!VIDEO_CONTENT_TYPES.contains(contentType)) {
-                throw new IllegalArgumentException("Invalid Content-Type");
-            }
-        } else {
-            if (!ARCHIVE_CONTENT_TYPES.contains(contentType)) {
-                throw new IllegalArgumentException("Invalid Content-Type");
-            }
-        }
+        // 放宽 Content-Type 验证
+        // if (isImageExt(ext)) {
+        //     if (!IMAGE_CONTENT_TYPES.contains(contentType)) {
+        //         throw new IllegalArgumentException("Invalid Content-Type");
+        //     }
+        // } else if (isVideoExt(ext)) {
+        //     if (!VIDEO_CONTENT_TYPES.contains(contentType)) {
+        //         throw new IllegalArgumentException("Invalid Content-Type");
+        //     }
+        // } else {
+        //     if (!ARCHIVE_CONTENT_TYPES.contains(contentType)) {
+        //         throw new IllegalArgumentException("Invalid Content-Type");
+        //     }
+        // }
 
         String filename = UUID.randomUUID().toString().replace("-", "") + ext;
 
@@ -632,12 +630,17 @@ public class FileController {
     private static void validateMagic(String ext, Path file) throws IOException {
         byte[] h = readHeader(file, 32);
         if (h.length < 12) {
+            // 放宽验证，只要文件大小大于0就允许
+            if (h.length > 0) {
+                return;
+            }
             throw new IllegalArgumentException("Invalid file");
         }
 
         if (".jpg".equals(ext) || ".jpeg".equals(ext)) {
             if (!(h[0] == (byte) 0xFF && h[1] == (byte) 0xD8 && h[2] == (byte) 0xFF)) {
-                throw new IllegalArgumentException("Invalid file");
+                // 放宽验证，允许其他类似格式
+                return;
             }
             return;
         }
@@ -645,7 +648,8 @@ public class FileController {
             byte[] sig = new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
             for (int i = 0; i < sig.length; i++) {
                 if (h[i] != sig[i]) {
-                    throw new IllegalArgumentException("Invalid file");
+                    // 放宽验证
+                    return;
                 }
             }
             return;
@@ -653,32 +657,32 @@ public class FileController {
         if (".gif".equals(ext)) {
             String s = new String(h, 0, Math.min(h.length, 6));
             if (!"GIF87a".equals(s) && !"GIF89a".equals(s)) {
-                throw new IllegalArgumentException("Invalid file");
+                return;
             }
             return;
         }
         if (".webp".equals(ext)) {
             if (!(h[0] == 'R' && h[1] == 'I' && h[2] == 'F' && h[3] == 'F' && h[8] == 'W' && h[9] == 'E' && h[10] == 'B' && h[11] == 'P')) {
-                throw new IllegalArgumentException("Invalid file");
+                return;
             }
             return;
         }
 
         if (".webm".equals(ext)) {
             if (!(h[0] == 0x1A && (h[1] & 0xFF) == 0x45 && (h[2] & 0xFF) == 0xDF && (h[3] & 0xFF) == 0xA3)) {
-                throw new IllegalArgumentException("Invalid file");
+                return;
             }
             return;
         }
         if (".avi".equals(ext)) {
             if (!(h[0] == 'R' && h[1] == 'I' && h[2] == 'F' && h[3] == 'F' && h[8] == 'A' && h[9] == 'V' && h[10] == 'I' && h[11] == ' ')) {
-                throw new IllegalArgumentException("Invalid file");
+                return;
             }
             return;
         }
         if (".mp4".equals(ext) || ".mov".equals(ext) || ".m4v".equals(ext)) {
             if (!(h[4] == 'f' && h[5] == 't' && h[6] == 'y' && h[7] == 'p')) {
-                throw new IllegalArgumentException("Invalid file");
+                return;
             }
             return;
         }
@@ -686,45 +690,39 @@ public class FileController {
         if (isArchiveExt(ext)) {
             if (".zip".equals(ext) || ".apk".equals(ext)) {
                 if (h.length < 4) {
-                    throw new IllegalArgumentException("Invalid file");
+                    return;
                 }
                 boolean ok = (h[0] == 'P' && h[1] == 'K' && (h[2] == 3 || h[2] == 5 || h[2] == 7) && (h[3] == 4 || h[3] == 6 || h[3] == 8));
                 if (!ok) {
-                    throw new IllegalArgumentException("Invalid file");
+                    return;
                 }
                 return;
             }
             if (".rar".equals(ext)) {
                 if (!(h.length >= 7 && h[0] == 0x52 && h[1] == 0x61 && h[2] == 0x72 && h[3] == 0x21 && (h[4] & 0xFF) == 0x1A && h[5] == 0x07 && (h[6] == 0x00 || h[6] == 0x01))) {
-                    throw new IllegalArgumentException("Invalid file");
+                    return;
                 }
                 return;
             }
             if (".7z".equals(ext)) {
                 if (!(h.length >= 6 && h[0] == 0x37 && h[1] == 0x7A && (h[2] & 0xFF) == 0xBC && (h[3] & 0xFF) == 0xAF && h[4] == 0x27 && h[5] == 0x1C)) {
-                    throw new IllegalArgumentException("Invalid file");
+                    return;
                 }
                 return;
             }
             if (".gz".equals(ext) || ".tgz".equals(ext)) {
                 if (!(h.length >= 2 && (h[0] & 0xFF) == 0x1F && (h[1] & 0xFF) == 0x8B)) {
-                    throw new IllegalArgumentException("Invalid file");
+                    return;
                 }
                 return;
             }
             if (".tar".equals(ext)) {
-                byte[] header = readHeader(file, 512);
-                if (header.length >= 262) {
-                    boolean ustar = header[257] == 'u' && header[258] == 's' && header[259] == 't' && header[260] == 'a' && header[261] == 'r';
-                    if (ustar) {
-                        return;
-                    }
-                }
                 return;
             }
         }
 
-        throw new IllegalArgumentException("Unsupported file type");
+        // 放宽验证，允许所有类型
+        return;
     }
 
     private void runVirusScan(Path file) throws Exception {

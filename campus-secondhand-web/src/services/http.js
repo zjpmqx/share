@@ -16,6 +16,8 @@ export const http = axios.create({
       }
     },
   ],
+  // 确保上传进度能正确工作
+  maxRedirects: 5,
 })
 
 http.interceptors.request.use((config) => {

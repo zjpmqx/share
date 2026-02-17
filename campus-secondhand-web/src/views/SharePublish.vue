@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { createShare, uploadFile } from '../services/api'
+import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 
@@ -13,6 +14,7 @@ const coverUrl = ref('')
 const uploadingCover = ref(false)
 const coverError = ref('')
 const coverInput = ref(null)
+const coverUploadProgress = ref(0)
 
 const mediaType = ref('NONE')
 const mediaUrl = ref('')
@@ -27,6 +29,14 @@ const MAX_UPLOAD_BYTES = 4294967296
 
 const loading = ref(false)
 const errorMsg = ref('')
+
+const mediaTypeOptions = [
+  { value: 'NONE', label: '纯文字', icon: 'Document' },
+  { value: 'IMAGE', label: '图片', icon: 'Picture' },
+  { value: 'VIDEO', label: '视频', icon: 'VideoCamera' },
+  { value: 'URL', label: '链接', icon: 'Link' },
+  { value: 'FILE', label: '文件（压缩包）', icon: 'Folder' }
+]
 
 const showUpload = computed(() => mediaType.value === 'IMAGE' || mediaType.value === 'VIDEO' || mediaType.value === 'FILE')
 const showLink = computed(() => mediaType.value === 'URL')
@@ -63,9 +73,9 @@ const uploadLabel = computed(() => {
   return '上传文件'
 })
 
-async function onPickFile(e) {
+async function onPickFile(fileObj) {
   uploadError.value = ''
-  const f = e?.target?.files?.[0]
+  const f = fileObj?.raw
   if (!f) {
     file.value = null
     return
@@ -74,9 +84,11 @@ async function onPickFile(e) {
   if (f.size > MAX_UPLOAD_BYTES) {
     uploadError.value = '文件过大（最大 4GB）'
     file.value = null
+    ElMessage.error(uploadError.value)
     return
   }
   file.value = f
+  await doUpload()
 }
 
 async function onPickCover(e) {
@@ -89,6 +101,7 @@ async function onPickCover(e) {
   if (!String(f.type || '').toLowerCase().startsWith('image/')) {
     coverError.value = '请选择图片文件'
     coverFile.value = null
+    ElMessage.error(coverError.value)
     return
   }
   coverFile.value = f
@@ -106,14 +119,30 @@ async function doUploadCover() {
   if (!coverFile.value) return
   uploadingCover.value = true
   coverError.value = ''
+  coverUploadProgress.value = 0
+  console.log('doUploadCover: 开始上传')
   try {
-    const resp = await uploadFile(coverFile.value)
+    console.log('开始上传封面:', coverFile.value.name, coverFile.value.size)
+    const resp = await uploadFile(coverFile.value, {
+      onProgress: (pct) => {
+        console.log('封面上传进度回调:', pct + '%')
+        const safePct = Math.min(Math.max(Number(pct) || 0, 0), 100)
+        coverUploadProgress.value = safePct
+        console.log('coverUploadProgress 已更新为:', coverUploadProgress.value)
+      },
+    })
     const url = resp?.data
     if (!url) throw new Error('上传失败：未返回地址')
+    console.log('封面上传完成，URL:', url)
     coverUrl.value = url
+    coverUploadProgress.value = 100
+    ElMessage.success('封面上传成功')
   } catch (e) {
+    console.error('封面上传失败:', e)
     coverUrl.value = ''
+    coverUploadProgress.value = 0
     coverError.value = e?.response?.data?.message || e?.message || '上传失败'
+    ElMessage.error(coverError.value)
   } finally {
     uploadingCover.value = false
   }
@@ -123,6 +152,7 @@ function clearCover() {
   coverFile.value = null
   coverUrl.value = ''
   coverError.value = ''
+  coverUploadProgress.value = 0
   try {
     if (coverInput.value) coverInput.value.value = ''
   } catch {
@@ -134,33 +164,28 @@ async function doUpload() {
   uploading.value = true
   uploadError.value = ''
   uploadProgress.value = 0
+  console.log('doUpload: 开始上传')
   try {
-    const isBrowser = typeof window !== 'undefined'
-    const host = isBrowser ? window.location.hostname : ''
-    const isLocalhost = host === 'localhost' || host === '127.0.0.1'
-    const isHttps = isBrowser ? window.location.protocol === 'https:' : false
-    const conservative = isHttps && !isLocalhost
-
+    console.log('开始上传文件:', file.value.name, file.value.size)
     const resp = await uploadFile(file.value, {
-      ...(mediaType.value === 'VIDEO'
-        ? {
-            // 线上 https 环境（尤其走隧道/代理）更容易在“单次大直传”时被中途断开。
-            // 这里对视频强制更保守：更低的直传阈值 + 更小并发，优先走分片以提高稳定性。
-            // 单个 chunk 如果上传耗时过长（上行慢）会触发代理 524，所以这里继续走小分片 + 低并发
-            chunkSize: conservative ? 1 * 1024 * 1024 : 16 * 1024 * 1024,
-            chunkThreshold: conservative ? 1 * 1024 * 1024 : 32 * 1024 * 1024,
-            concurrency: conservative ? 1 : 4,
-          }
-        : null),
       onProgress: (pct) => {
-        uploadProgress.value = Math.min(Math.max(Number(pct) || 0, 0), 100)
+        console.log('上传进度回调:', pct + '%')
+        const safePct = Math.min(Math.max(Number(pct) || 0, 0), 100)
+        uploadProgress.value = safePct
+        console.log('uploadProgress 已更新为:', uploadProgress.value)
       },
     })
     const url = resp?.data
     if (!url) throw new Error('上传失败：未返回地址')
+    console.log('上传完成，URL:', url)
     mediaUrl.value = url
+    uploadProgress.value = 100
+    ElMessage.success('文件上传成功')
   } catch (e) {
+    console.error('上传失败:', e)
     uploadError.value = e?.response?.data?.message || e?.message || '上传失败'
+    uploadProgress.value = 0
+    ElMessage.error(uploadError.value)
   } finally {
     uploading.value = false
   }
@@ -179,26 +204,30 @@ function resetPayloadByType() {
   if (mediaType.value === 'IMAGE' || mediaType.value === 'VIDEO' || mediaType.value === 'FILE') {
     linkUrl.value = ''
   }
+  uploadProgress.value = 0
 }
 
 async function submit() {
   errorMsg.value = ''
 
-  // 前端先拦截必填校验，避免发起请求后才看到 400
   if (!String(title.value || '').trim()) {
     errorMsg.value = '标题不能为空'
+    ElMessage.warning(errorMsg.value)
     return
   }
   if (mediaType.value === 'URL' && !String(linkUrl.value || '').trim()) {
     errorMsg.value = '链接不能为空'
+    ElMessage.warning(errorMsg.value)
     return
   }
   if (mediaNeedsUrl.value && !String(mediaUrl.value || '').trim()) {
     errorMsg.value = '请先上传文件并等待合并完成（出现预览后再发布）'
+    ElMessage.warning(errorMsg.value)
     return
   }
   if (uploading.value || uploadingCover.value) {
     errorMsg.value = '正在上传中，请稍后再发布'
+    ElMessage.warning(errorMsg.value)
     return
   }
 
@@ -215,6 +244,7 @@ async function submit() {
     }
     const resp = await createShare(payload)
     const id = resp?.data?.id
+    ElMessage.success('发布成功！')
     if (id) {
       router.push(`/shares/${id}`)
     } else {
@@ -222,6 +252,7 @@ async function submit() {
     }
   } catch (e) {
     errorMsg.value = e?.response?.data?.message || e?.message || '发布失败'
+    ElMessage.error(errorMsg.value)
   } finally {
     loading.value = false
   }
@@ -230,86 +261,149 @@ async function submit() {
 
 <template>
   <div class="wrap">
-    <h1 class="title">发布好物分享</h1>
+    <el-page-header @back="() => router.back()" content="发布好物分享" style="margin-bottom: 14px;" />
 
-    <div class="card">
-      <div class="field">
-        <div class="label">封面（可选）</div>
-        <div class="coverRow">
-          <input ref="coverInput" class="coverPick" type="file" accept="image/*" @change="onPickCover" />
-          <button class="ghost" type="button" :disabled="uploadingCover" @click="openCoverPicker">
-            {{ uploadingCover ? '上传中' : (coverUrl ? '更换封面' : '上传封面') }}
-          </button>
-          <button v-if="coverUrl" class="ghost" type="button" :disabled="uploadingCover" @click="clearCover">移除</button>
+    <el-card class="card">
+      <el-form label-position="top">
+        <el-form-item label="封面（可选）">
+          <div class="coverRow">
+            <input ref="coverInput" class="coverPick" type="file" accept="image/*" @change="onPickCover" />
+            <el-button :icon="Upload" :loading="uploadingCover" @click="openCoverPicker">
+              {{ uploadingCover ? '上传中' : (coverUrl ? '更换封面' : '上传封面') }}
+            </el-button>
+            <el-button v-if="coverUrl" :icon="Delete" :disabled="uploadingCover" @click="clearCover">
+              移除
+            </el-button>
+          </div>
+          <el-alert v-if="coverError" type="error" :closable="false" style="margin-top: 10px;">
+            {{ coverError }}
+          </el-alert>
+          <div v-if="uploadingCover" class="progressWrapper">
+            <el-progress :percentage="coverUploadProgress" :stroke-width="16" :color="coverUploadProgress === 100 ? '#67c23a' : '#409eff'" />
+            <div class="progressText muted" style="margin-top: 6px; text-align: center;">{{ coverUploadProgress }}%</div>
+          </div>
+          <div v-if="coverUrl" class="coverPreview">
+            <el-image :src="coverUrl" fit="cover" />
+          </div>
+        </el-form-item>
+
+        <el-form-item label="标题" required>
+          <el-input
+            v-model="title"
+            placeholder="例：免费送一套教材 / 推荐一个开源工具"
+            maxlength="100"
+            show-word-limit
+          />
+        </el-form-item>
+
+        <el-form-item label="内容">
+          <el-input
+            v-model="content"
+            type="textarea"
+            :rows="4"
+            placeholder="补充说明、使用体验、领取方式等"
+            maxlength="2000"
+            show-word-limit
+          />
+        </el-form-item>
+
+        <el-form-item label="分享类型">
+          <el-radio-group v-model="mediaType" @change="resetPayloadByType">
+            <el-radio-button v-for="type in mediaTypeOptions" :key="type.value" :value="type.value">
+              <el-icon><component :is="type.icon" /></el-icon>
+              {{ type.label }}
+            </el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <div v-if="showUpload">
+          <el-form-item :label="uploadLabel" required>
+            <div class="uploadRow">
+              <el-upload
+                class="fileUpload"
+                :show-file-list="false"
+                :auto-upload="false"
+                :on-change="onPickFile"
+                :accept="acceptValue"
+                drag
+                :disabled="uploading"
+              >
+                <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+                <div class="el-upload__text">
+                  将文件拖到此处，或<em>点击上传</em>
+                </div>
+                <template #tip>
+                  <div class="el-upload__tip">
+                    {{ mediaType === 'FILE' ? '支持 zip/rar/7z/tar/gz/tgz 格式' : '' }}
+                    {{ mediaType === 'IMAGE' ? '支持 jpg/png/gif/webp 等图片格式' : '' }}
+                    {{ mediaType === 'VIDEO' ? '支持 mp4/webm/avi/mov 等视频格式' : '' }}
+                  </div>
+                </template>
+              </el-upload>
+            </div>
+            
+            <div v-if="uploading" class="progressWrapper">
+              <el-progress :percentage="uploadProgress" :stroke-width="16" :color="uploadProgress === 100 ? '#67c23a' : '#409eff'" />
+              <div class="progressText muted" style="margin-top: 6px; text-align: center;">{{ uploadProgress }}%</div>
+            </div>
+            
+            <el-alert v-if="uploadError" type="error" :closable="false" style="margin-top: 10px;">
+              {{ uploadError }}
+            </el-alert>
+            
+            <div v-if="mediaUrl" class="preview">
+              <el-image
+                v-if="mediaType === 'IMAGE'"
+                :src="mediaUrl"
+                fit="contain"
+                :preview-src-list="[mediaUrl]"
+                lazy
+              />
+              <video v-else-if="mediaType === 'VIDEO'" controls :src="mediaUrl" style="width: 100%; max-height: 360px; border-radius: 8px;"></video>
+              <a
+                v-else
+                class="fileLink"
+                :href="mediaUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                :download="(mediaUrl || '').split('/').pop() || 'attachment'"
+              >
+                <el-icon><Document /></el-icon>
+                {{ (mediaUrl || '').split('/').pop() || 'attachment' }}
+              </a>
+              <el-tag type="success" style="margin-top: 10px;">
+                <el-icon><CircleCheck /></el-icon>
+                上传成功
+              </el-tag>
+            </div>
+          </el-form-item>
         </div>
-        <div v-if="coverError" class="error">{{ coverError }}</div>
-        <div v-if="coverUrl" class="coverPreview">
-          <img :src="coverUrl" alt="" />
+
+        <div v-if="showLink">
+          <el-form-item label="URL 链接" required>
+            <el-input
+              v-model="linkUrl"
+              placeholder="https://..."
+              prefix-icon="Link"
+            />
+          </el-form-item>
         </div>
-      </div>
 
-      <div class="field">
-        <div class="label">标题</div>
-        <input v-model="title" class="input" placeholder="例：免费送一套教材 / 推荐一个开源工具" />
-      </div>
-
-      <div class="field">
-        <div class="label">内容</div>
-        <textarea v-model="content" class="textarea" placeholder="补充说明、使用体验、领取方式等"></textarea>
-      </div>
-
-      <div class="field">
-        <div class="label">分享类型</div>
-        <select v-model="mediaType" class="select" @change="resetPayloadByType">
-          <option value="NONE">纯文字</option>
-          <option value="IMAGE">图片</option>
-          <option value="VIDEO">视频</option>
-          <option value="URL">链接</option>
-          <option value="FILE">文件（压缩包）</option>
-        </select>
-      </div>
-
-      <div v-if="showUpload" class="field">
-        <div class="label">{{ uploadLabel }}</div>
-        <div class="uploadRow">
-          <input class="file" type="file" :accept="acceptValue" @change="onPickFile" />
-          <button :class="['ghost', uploading ? '' : 'uploadYellow']" type="button" :disabled="!file || uploading" @click="doUpload">
-            {{ uploading ? '上传中...' : '上传' }}
-          </button>
-        </div>
-        <div v-if="uploadError" class="error">{{ uploadError }}</div>
-        <div v-if="uploading" class="progress">
-          <div class="bar" :style="{ width: uploadProgress + '%' }"></div>
-        </div>
-        <div v-if="uploading" class="muted progressText">{{ uploadProgress }}%</div>
-        <div v-if="mediaUrl" class="preview">
-          <img v-if="mediaType === 'IMAGE'" :src="mediaUrl" alt="" />
-          <video v-else-if="mediaType === 'VIDEO'" controls :src="mediaUrl"></video>
-          <a
-            v-else
-            class="fileLink"
-            :href="mediaUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            :download="(mediaUrl || '').split('/').pop() || 'attachment'"
+        <el-form-item>
+          <el-button
+            type="primary"
+            size="large"
+            :icon="Upload"
+            :disabled="!canSubmit"
+            :loading="loading"
+            @click="submit"
+            style="width: 100%;"
           >
-            下载附件
-          </a>
-        </div>
-        <div class="tips muted">上传成功后会生成可访问地址，并作为分享内容展示。</div>
-      </div>
-
-      <div v-if="showLink" class="field">
-        <div class="label">URL 链接</div>
-        <input v-model="linkUrl" class="input" placeholder="https://..." />
-      </div>
-
-      <div v-if="errorMsg" class="error">{{ errorMsg }}</div>
-
-      <button class="primary" type="button" :disabled="!canSubmit" @click="submit">
-        {{ loading ? '提交中...' : '发布' }}
-      </button>
-    </div>
+            {{ loading ? '提交中...' : '发布分享' }}
+          </el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
   </div>
 </template>
 
@@ -319,100 +413,12 @@ async function submit() {
   margin: 0 auto;
 }
 
-.title {
-  margin: 10px 0 12px;
-  font-size: 22px;
-  font-weight: 800;
-}
-
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border-2);
   border-radius: 14px;
-  padding: 14px;
-  box-shadow: var(--shadow);
-}
-
-.field {
-  margin-bottom: 12px;
-}
-
-.label {
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 6px;
-}
-
-.input,
-.select {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  background: var(--surface);
-}
-
-.textarea {
-  width: 100%;
-  min-height: 120px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  background: var(--surface);
-}
-
-.primary {
-  background: var(--primary);
-  color: #fff;
-  border: 0;
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.primary:hover {
-  background: var(--primary-hover);
-}
-
-.uploadRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.file {
-  flex: 1;
-  min-width: 240px;
-}
-
-.ghost {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.uploadYellow {
-  background: #fbbf24;
-  border-color: #fbbf24;
-  color: #111827;
-}
-
-.uploadYellow:hover {
-  background: #f59e0b;
-  border-color: #f59e0b;
-}
-
-.uploadYellow:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 
 .coverRow {
   display: flex;
-  align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
@@ -422,71 +428,64 @@ async function submit() {
 }
 
 .coverPreview {
-  margin-top: 10px;
-  border: 1px solid var(--border-2);
-  border-radius: var(--radius);
+  margin-top: 12px;
+  border-radius: 8px;
   overflow: hidden;
-  background: var(--surface-2);
 }
 
-.coverPreview img {
+.coverPreview :deep(.el-image) {
   width: 100%;
-  height: 180px;
-  object-fit: cover;
-  display: block;
+  height: 200px;
 }
 
-.error {
-  margin: 8px 0;
-  color: var(--danger);
-  font-size: 13px;
+.uploadRow {
+  width: 100%;
+}
+
+.fileUpload {
+  width: 100%;
+}
+
+.fileUpload :deep(.el-upload-dragger) {
+  width: 100%;
 }
 
 .preview {
-  margin-top: 10px;
-  border: 1px solid var(--border-2);
-  border-radius: var(--radius);
-  overflow: hidden;
+  margin-top: 14px;
+  padding: 14px;
   background: var(--surface-2);
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
 }
 
-.preview img,
-.preview video {
+.preview :deep(.el-image) {
   width: 100%;
-  height: 280px;
-  object-fit: contain;
-  display: block;
+  max-height: 360px;
 }
 
 .fileLink {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 12px;
   color: var(--primary);
   word-break: break-all;
-  display: block;
+  background: var(--surface);
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.15s ease;
 }
 
-.tips {
-  margin-top: 10px;
-  font-size: 12px;
-}
-
-.progress {
-  margin-top: 10px;
-  height: 10px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: var(--surface-2);
-  border: 1px solid var(--border-2);
-}
-
-.bar {
-  height: 100%;
+.fileLink:hover {
   background: var(--primary);
-  transition: width 0.1s linear;
+  color: #fff;
+}
+
+.progressWrapper {
+  margin-top: 10px;
 }
 
 .progressText {
-  margin-top: 6px;
-  font-size: 12px;
+  font-size: 13px;
 }
 </style>
