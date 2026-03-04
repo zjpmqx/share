@@ -51,6 +51,11 @@ export async function me() {
   return data
 }
 
+export async function verifyShareGate(payload) {
+  const { data } = await http.post('/auth/share-gate/verify', payload)
+  return data
+}
+
 export async function onlinePing() {
   const { data } = await http.post('/online/ping')
   return data
@@ -232,44 +237,258 @@ async function postWithRetry(url, body, config, retryOptions = {}) {
   throw lastErr
 }
 
+const CHUNK_SIZE = 8 * 1024 * 1024
+const CHUNK_UPLOAD_TIMEOUT = 180 * 1000
+const CHUNK_MAX_RETRIES = 3
+const CONCURRENT_CHUNKS = 4
+
 export async function uploadFile(file, options = {}) {
-  console.log('uploadFile 开始', file.name, file.size)
-  
   const onProgress = typeof options?.onProgress === 'function' ? options.onProgress : null
   const timeoutMs = Number.isFinite(options?.timeoutMs) ? options.timeoutMs : 10 * 60 * 1000
-  const retries = Number.isFinite(options?.retries) ? options.retries : 3
   
   if (!file) {
     throw new Error('file is required')
   }
 
+  const fileSize = file.size
+  const fileName = file.name
+  
+  if (onProgress) {
+    onProgress(1)
+  }
+  
+  if (fileSize <= 4 * 1024 * 1024) {
+    return uploadFileSimple(file, onProgress, timeoutMs)
+  }
+  
+  return uploadFileChunked(file, onProgress, timeoutMs)
+}
+
+async function uploadFileSimple(file, onProgress, timeoutMs) {
   const form = new FormData()
   form.append('file', file)
+  
+  let lastProgress = 0
   
   try {
     const { data } = await http.post('/files/upload', form, {
       timeout: timeoutMs,
-      // 确保请求头正确
       headers: {
-        'Content-Type': undefined, // 让 axios 自动设置
+        'Content-Type': undefined,
       },
       onUploadProgress: (progressEvent) => {
-        console.log('上传进度事件:', progressEvent)
-        if (onProgress && progressEvent.total && progressEvent.total > 0) {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
-          console.log('上传进度计算:', percentCompleted + '%', 'loaded:', progressEvent.loaded, 'total:', progressEvent.total)
-          onProgress(percentCompleted)
+        if (onProgress) {
+          const loaded = progressEvent.loaded || 0
+          const total = progressEvent.total || file.size || 0
+          if (total > 0) {
+            const percentCompleted = Math.min(Math.round((loaded * 100) / total), 99)
+            if (percentCompleted > lastProgress) {
+              lastProgress = percentCompleted
+              onProgress(percentCompleted)
+            }
+          }
         }
       },
     })
     
-    if (onProgress) onProgress(100)
-    console.log('uploadFile 完成', data)
+    if (onProgress) {
+      onProgress(100)
+    }
+    
     return data
   } catch (error) {
     console.error('uploadFile 失败:', error)
     throw error
   }
+}
+
+async function uploadFileChunked(file, onProgress, timeoutMs) {
+  const fileSize = file.size
+  const fileName = file.name
+  const chunkSize = CHUNK_SIZE
+  const totalChunks = Math.ceil(fileSize / chunkSize)
+  
+  let uploadId = null
+  
+  try {
+    if (onProgress) {
+      onProgress(2)
+    }
+    
+    const initResp = await http.post('/files/upload/init', {
+      filename: fileName,
+      size: fileSize,
+      chunkSize: chunkSize,
+      contentType: file.type || 'application/octet-stream',
+    })
+    
+    if (initResp?.data?.code !== 0) {
+      throw new Error(initResp?.data?.message || '初始化上传失败')
+    }
+    
+    uploadId = initResp.data.data?.uploadId
+    if (!uploadId) {
+      throw new Error('初始化上传失败：未获取 uploadId')
+    }
+    
+    const serverChunkSize = initResp.data.data?.chunkSize || chunkSize
+    const serverTotalChunks = initResp.data.data?.totalChunks || totalChunks
+    
+    const progressTracker = {
+      chunks: new Array(serverTotalChunks).fill(0),
+      uploadedBytes: 0,
+      updateProgress(chunkIndex, loaded) {
+        const safeLoaded = Math.max(0, Number(loaded) || 0)
+        const prevLoaded = this.chunks[chunkIndex] || 0
+        this.chunks[chunkIndex] = safeLoaded
+        this.uploadedBytes += (safeLoaded - prevLoaded)
+        const percentCompleted = Math.min(Math.round((this.uploadedBytes * 100) / fileSize), 99)
+        if (onProgress) {
+          onProgress(percentCompleted)
+        }
+      },
+      markCompleted(chunkIndex, chunkSize) {
+        const safeChunkSize = Math.max(0, Number(chunkSize) || 0)
+        const prevLoaded = this.chunks[chunkIndex] || 0
+        this.chunks[chunkIndex] = safeChunkSize
+        this.uploadedBytes += (safeChunkSize - prevLoaded)
+        const percentCompleted = Math.min(Math.round((this.uploadedBytes * 100) / fileSize), 99)
+        if (onProgress) {
+          onProgress(percentCompleted)
+        }
+      }
+    }
+    
+    async function uploadSingleChunk(index) {
+      const start = index * serverChunkSize
+      const end = Math.min(start + serverChunkSize, fileSize)
+      const chunk = file.slice(start, end)
+      const chunkLen = end - start
+      
+      for (let retry = 0; retry < CHUNK_MAX_RETRIES; retry++) {
+        try {
+          const chunkForm = new FormData()
+          chunkForm.append('uploadId', uploadId)
+          chunkForm.append('index', String(index))
+          chunkForm.append('file', chunk, fileName + '.part' + index)
+          
+          await http.post('/files/upload/chunk', chunkForm, {
+            timeout: CHUNK_UPLOAD_TIMEOUT,
+            headers: {
+              'Content-Type': undefined,
+            },
+            onUploadProgress: (progressEvent) => {
+              progressTracker.updateProgress(index, progressEvent.loaded || 0)
+            },
+          })
+          
+          progressTracker.markCompleted(index, chunkLen)
+          return { index, success: true }
+        } catch (e) {
+          if (retry === CHUNK_MAX_RETRIES - 1) {
+            return { index, success: false, error: e }
+          }
+          await sleep(1000 * (retry + 1))
+        }
+      }
+      
+      return { index, success: false, error: new Error('上传失败') }
+    }
+    
+    const results = []
+    for (let i = 0; i < serverTotalChunks; i += CONCURRENT_CHUNKS) {
+      const batch = []
+      for (let j = i; j < Math.min(i + CONCURRENT_CHUNKS, serverTotalChunks); j++) {
+        batch.push(uploadSingleChunk(j))
+      }
+      
+      const batchResults = await Promise.all(batch)
+      results.push(...batchResults)
+      
+      const failedChunk = batchResults.find(r => !r.success)
+      if (failedChunk) {
+        throw failedChunk.error || new Error(`分片 ${failedChunk.index} 上传失败`)
+      }
+    }
+    
+    if (onProgress) {
+      onProgress(98)
+    }
+    
+    let completeResp = null
+    try {
+      completeResp = await http.post('/files/upload/complete', null, {
+        params: { uploadId },
+        timeout: 90 * 1000,
+      })
+    } catch (e) {
+      if (e?.code === 'ECONNABORTED' || e?.response?.status === 524) {
+        return await pollUploadResult(uploadId, onProgress)
+      }
+      throw e
+    }
+    
+    if (completeResp?.status === 202 || 
+        completeResp?.data?.data === 'PROCESSING' ||
+        (completeResp?.data?.code === 0 && !completeResp?.data?.data)) {
+      return await pollUploadResult(uploadId, onProgress)
+    }
+    
+    if (completeResp?.data?.code !== 0) {
+      throw new Error(completeResp?.data?.message || '合并文件失败')
+    }
+    
+    const url = completeResp.data.data
+    if (!url || typeof url !== 'string') {
+      throw new Error('上传失败：未返回有效地址')
+    }
+    
+    if (onProgress) {
+      onProgress(100)
+    }
+    
+    return completeResp.data
+  } catch (error) {
+    console.error('分片上传失败:', error)
+    throw error
+  }
+}
+
+async function pollUploadResult(uploadId, onProgress, maxAttempts = 120, intervalMs = 1500) {
+  if (onProgress) {
+    onProgress(99)
+  }
+  
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const resp = await http.get('/files/upload/result', {
+        params: { uploadId },
+        timeout: 30 * 1000,
+      })
+      
+      if (resp?.status === 200 && resp?.data?.code === 0) {
+        const url = resp.data.data
+        if (url && typeof url === 'string' && url.startsWith('/')) {
+          if (onProgress) {
+            onProgress(100)
+          }
+          return resp.data
+        }
+      }
+      
+      if (resp?.status === 202) {
+        if (onProgress && i % 10 === 0) {
+          onProgress(99)
+        }
+      }
+    } catch (e) {
+      console.warn('轮询上传结果:', e?.message || e)
+    }
+    
+    await sleep(intervalMs)
+  }
+  
+  throw new Error('上传超时：文件合并时间过长，请稍后刷新页面查看')
 }
 
 export async function listShares(params) {

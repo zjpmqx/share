@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getToken, clearToken } from './auth'
+import { getToken, clearToken, getShareGateToken, clearShareGateToken } from './auth'
 
 export const http = axios.create({
   baseURL: import.meta.env.VITE_API_BASE || '/api',
@@ -26,6 +26,20 @@ http.interceptors.request.use((config) => {
     config.headers = config.headers || {}
     config.headers.Authorization = `Bearer ${token}`
   }
+
+  try {
+    const path = String(config?.url || '')
+    const isSharesApi = path.startsWith('/shares')
+    if (isSharesApi) {
+      const shareGateToken = getShareGateToken()
+      if (shareGateToken) {
+        config.headers = config.headers || {}
+        config.headers['X-Share-Gate-Token'] = shareGateToken
+      }
+    }
+  } catch {
+  }
+
   return config
 })
 
@@ -43,13 +57,35 @@ http.interceptors.response.use(
     if (error?.response?.status === 401) {
       clearToken()
 
-      // 避免出现“token 失效但页面仍停留在受保护页，导致上传/请求反复报错”的体验
+      try {
+        const path = String(error?.config?.url || '')
+        if (path.startsWith('/shares')) {
+          clearShareGateToken()
+        }
+      } catch {
+      }
+
       try {
         const isBrowser = typeof window !== 'undefined'
         if (isBrowser) {
           const path = window.location.pathname + window.location.search + window.location.hash
           if (!window.location.pathname.startsWith('/login')) {
             window.location.href = `/login?redirect=${encodeURIComponent(path)}`
+          }
+        }
+      } catch {
+      }
+    }
+
+    if (error?.response?.status === 403) {
+      try {
+        const path = String(error?.config?.url || '')
+        const msg = String(error?.response?.data?.message || '')
+        if (path.startsWith('/shares') && msg.includes('Share gate verify required')) {
+          clearShareGateToken()
+          if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/shares/verify')) {
+            const redirect = window.location.pathname + window.location.search + window.location.hash
+            window.location.href = `/shares/verify?redirect=${encodeURIComponent(redirect)}`
           }
         }
       } catch {

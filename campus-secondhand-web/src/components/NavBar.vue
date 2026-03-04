@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { me } from '../services/api'
 import { clearToken, getRole, getToken, setRole } from '../services/auth'
@@ -55,6 +55,13 @@ onUnmounted(() => {
   window.removeEventListener('auth-changed', onAuthChanged)
 })
 
+watch(
+  () => route.fullPath,
+  () => {
+    menuOpen.value = false
+  }
+)
+
 async function logout() {
   try {
     await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
@@ -79,10 +86,16 @@ function toggle() {
 
 <template>
   <header class="nav">
+    <div class="glow glowLeft"></div>
+    <div class="glow glowRight"></div>
+
     <div class="inner">
       <div class="brand" @click="router.push({ name: 'home' })">
         <el-icon class="brandIcon"><ShoppingBag /></el-icon>
-        <span>校园二手交易平台</span>
+        <div class="brandText">
+          <span class="brandMain">校园二手交易平台</span>
+          <span class="brandSub">轻松买卖 闪电成交</span>
+        </div>
       </div>
 
       <el-button class="hamburger" text type="info" @click="toggle">
@@ -110,7 +123,7 @@ function toggle() {
           <el-icon><Tickets /></el-icon>
           <span>订单</span>
         </router-link>
-        
+
         <template v-if="!loggedIn">
           <router-link class="link loginBtn" :class="{ active: route.name === 'login' }" to="/login">
             <el-icon><User /></el-icon>
@@ -120,7 +133,7 @@ function toggle() {
             <span>注册</span>
           </router-link>
         </template>
-        
+
         <template v-else>
           <el-dropdown v-if="isAdmin" trigger="click">
             <router-link class="link" :class="{ active: route.name?.startsWith('admin') }" to="#">
@@ -137,7 +150,7 @@ function toggle() {
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-          
+
           <el-dropdown trigger="click">
             <div class="link userDropdown">
               <el-avatar :size="28">
@@ -173,15 +186,41 @@ function toggle() {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #3b82f6 100%);
+  overflow: hidden;
+  background: linear-gradient(120deg, #172554 0%, #1d4ed8 45%, #0ea5e9 100%);
   color: #fff;
-  box-shadow: 0 4px 20px rgba(30, 58, 138, 0.3);
+  box-shadow: 0 10px 30px rgba(23, 37, 84, 0.28);
+}
+
+.glow {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(30px);
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.glowLeft {
+  width: 180px;
+  height: 180px;
+  left: -70px;
+  top: -100px;
+  background: rgba(56, 189, 248, 0.7);
+}
+
+.glowRight {
+  width: 220px;
+  height: 220px;
+  right: -80px;
+  top: -120px;
+  background: rgba(99, 102, 241, 0.72);
 }
 
 .inner {
+  position: relative;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 12px 16px;
+  padding: 10px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -189,22 +228,35 @@ function toggle() {
 }
 
 .brand {
-  font-weight: 700;
-  cursor: pointer;
-  letter-spacing: 0.3px;
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 18px;
-  transition: opacity 0.2s ease;
-}
-
-.brand:hover {
-  opacity: 0.9;
+  gap: 10px;
+  cursor: pointer;
 }
 
 .brandIcon {
   font-size: 24px;
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.brandMain {
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0.25px;
+}
+
+.brandSub {
+  margin-top: 2px;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  color: rgba(226, 232, 240, 0.9);
 }
 
 .hamburger {
@@ -221,26 +273,26 @@ function toggle() {
 }
 
 .link {
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(255, 255, 255, 0.96);
   text-decoration: none;
   padding: 8px 14px;
-  border-radius: 10px;
+  border-radius: 999px;
   transition: all 0.2s ease;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
 }
 
 .link:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.14);
   transform: translateY(-1px);
 }
 
 .link.active {
-  background: rgba(255, 255, 255, 0.22);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.24);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.15);
 }
 
 .loginBtn {
@@ -248,11 +300,13 @@ function toggle() {
 }
 
 .registerBtn {
-  background: rgba(255, 255, 255, 0.2);
+  color: #1d4ed8;
+  background: #f8fafc;
 }
 
 .registerBtn:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background: #ffffff;
+  color: #1e3a8a;
 }
 
 .userDropdown {
@@ -266,6 +320,12 @@ function toggle() {
   white-space: nowrap;
 }
 
+@media (max-width: 980px) {
+  .brandSub {
+    display: none;
+  }
+}
+
 @media (max-width: 860px) {
   .hamburger {
     display: inline-flex;
@@ -275,14 +335,15 @@ function toggle() {
     display: none;
     position: absolute;
     right: 16px;
-    top: 60px;
+    top: 58px;
     flex-direction: column;
     align-items: stretch;
-    background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+    background: linear-gradient(140deg, rgba(30, 64, 175, 0.96), rgba(14, 116, 144, 0.96));
     padding: 12px;
-    border-radius: 14px;
-    width: 220px;
-    box-shadow: 0 10px 40px rgba(30, 58, 138, 0.4);
+    border-radius: 16px;
+    width: 236px;
+    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.18);
   }
 
   .links.open {
@@ -290,6 +351,7 @@ function toggle() {
   }
 
   .link {
+    border-radius: 12px;
     padding: 12px 14px;
     justify-content: flex-start;
   }
@@ -304,6 +366,12 @@ function toggle() {
 
   .username {
     max-width: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .brandMain {
+    font-size: 14px;
   }
 }
 </style>

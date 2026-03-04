@@ -1,6 +1,7 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { me, updateAvatar, uploadFile } from '../services/api'
+import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -51,6 +52,7 @@ async function save() {
 
     await updateAvatar({ avatarUrl })
     okMsg.value = '头像已更新'
+    ElMessage.success('头像更新成功')
     await load()
 
     file.value = null
@@ -66,96 +68,127 @@ async function save() {
 }
 
 onMounted(load)
+onUnmounted(() => {
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+  }
+})
 </script>
 
 <template>
-  <div class="wrap">
-    <div class="head">
+  <div class="profilePage">
+    <section class="hero">
       <div>
-        <div class="title">个人资料</div>
-        <div class="sub">上传头像后，评论/留言会显示你的头像与用户名。</div>
+        <div class="heroTag">MY PROFILE</div>
+        <h1>个人资料中心</h1>
+        <p>维护你的头像和基本信息，让互动展示更清晰、更有辨识度。</p>
       </div>
-      <button class="ghost" type="button" :disabled="loading" @click="load">刷新</button>
-    </div>
+      <el-button class="refreshBtn" :disabled="loading" @click="load">刷新资料</el-button>
+    </section>
 
     <div v-if="errorMsg" class="error">{{ errorMsg }}</div>
     <div v-if="okMsg" class="ok">{{ okMsg }}</div>
 
-    <div v-if="loading" class="muted">加载中...</div>
+    <el-card v-if="loading" class="card" shadow="hover">
+      <el-skeleton :rows="4" animated />
+    </el-card>
 
-    <div v-else class="card">
-      <div class="row">
-        <div class="avatar">
+    <el-card v-else class="card" shadow="hover">
+      <div class="topRow">
+        <div class="avatarWrap">
           <img v-if="previewUrl || my?.avatarUrl" :src="previewUrl || my?.avatarUrl" alt="" />
-          <div v-else class="avatarFallback"></div>
+          <div v-else class="avatarFallback">
+            <el-icon><User /></el-icon>
+          </div>
         </div>
 
         <div class="info">
           <div class="name">{{ my?.username || '-' }}</div>
           <div class="meta">角色：{{ my?.role || '-' }}</div>
+          <div class="meta">手机号：{{ my?.phone || '未填写' }}</div>
         </div>
       </div>
 
-      <div class="uploader">
-        <input class="file" type="file" accept="image/*" @change="onPick" />
-        <button class="primary" type="button" :disabled="saving" @click="save">
-          {{ saving ? '保存中...' : '保存头像' }}
-        </button>
+      <el-divider />
+
+      <div class="uploadArea">
+        <div class="sectionTitle">更新头像</div>
+        <div class="uploader">
+          <input class="file" type="file" accept="image/*" @change="onPick" />
+          <el-button type="primary" :loading="saving" :disabled="saving" @click="save">
+            {{ saving ? '保存中...' : '保存头像' }}
+          </el-button>
+        </div>
       </div>
-    </div>
+    </el-card>
   </div>
 </template>
 
 <style scoped>
-.wrap {
-  max-width: 720px;
+.profilePage {
+  max-width: 860px;
   margin: 0 auto;
 }
 
-.head {
+.hero {
+  margin: 4px 0 14px;
+  border-radius: 18px;
+  padding: 20px;
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center;
   gap: 12px;
-  margin: 6px 0 14px;
+  background: linear-gradient(135deg, #7c3aed, #4f46e5 58%, #2563eb);
+  color: #eef2ff;
+  box-shadow: 0 14px 30px rgba(79, 70, 229, 0.26);
 }
 
-.title {
-  font-size: 20px;
-  font-weight: 900;
+.heroTag {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.15);
 }
 
-.sub {
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 13px;
+.hero h1 {
+  margin: 12px 0 8px;
+  font-size: 28px;
+  line-height: 1.2;
+  color: #f8fafc;
+}
+
+.hero p {
+  margin: 0;
+  color: rgba(238, 242, 255, 0.92);
+}
+
+.refreshBtn {
+  border-radius: 12px;
 }
 
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border-2);
-  border-radius: 14px;
-  padding: 14px;
-  box-shadow: var(--shadow);
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
 }
 
-.row {
+.topRow {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
-.avatar {
-  width: 64px;
-  height: 64px;
+.avatarWrap {
+  width: 86px;
+  height: 86px;
   border-radius: 999px;
   overflow: hidden;
-  border: 1px solid var(--border-2);
-  background: var(--surface-2);
   flex: 0 0 auto;
+  border: 2px solid rgba(99, 102, 241, 0.22);
+  background: #f8fafc;
 }
 
-.avatar img {
+.avatarWrap img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -165,7 +198,11 @@ onMounted(load)
 .avatarFallback {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(34, 197, 94, 0.18));
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  color: #6366f1;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.14), rgba(59, 130, 246, 0.12));
 }
 
 .info {
@@ -173,53 +210,32 @@ onMounted(load)
 }
 
 .name {
-  font-weight: 900;
-  font-size: 16px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
 }
 
 .meta {
-  margin-top: 4px;
+  margin-top: 6px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
+}
+
+.sectionTitle {
+  margin-bottom: 10px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
 }
 
 .uploader {
-  margin-top: 14px;
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-@media (max-width: 520px) {
-  .uploader {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-
 .file {
   flex: 1;
-}
-
-.primary {
-  background: var(--primary);
-  color: #fff;
-  border: 0;
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.ghost {
-  background: rgba(0, 0, 0, 0.03);
-  border: 1px solid var(--border-2);
-  padding: 8px 12px;
-  border-radius: 12px;
-  cursor: pointer;
-}
-
-.muted {
-  color: var(--muted);
 }
 
 .error {
@@ -235,10 +251,26 @@ onMounted(load)
 .ok {
   margin: 10px 0 12px;
   padding: 10px 12px;
-  background: rgba(34, 197, 94, 0.10);
+  background: rgba(34, 197, 94, 0.1);
   border: 1px solid rgba(34, 197, 94, 0.22);
   border-radius: 14px;
   color: rgba(22, 163, 74, 1);
   font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .hero h1 {
+    font-size: 24px;
+  }
+
+  .uploader {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 </style>

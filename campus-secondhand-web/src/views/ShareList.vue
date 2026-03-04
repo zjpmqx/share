@@ -119,14 +119,19 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page">
-    <div class="head">
-      <div>
+  <div class="page shareListPage">
+    <div class="hero">
+      <div class="heroMain">
         <div class="title">
           <el-icon><ChatLineSquare /></el-icon>
           好物分享
         </div>
-        <div class="sub">免费无私分享：图片 / 视频 / 链接，也可以在下方留言交流。</div>
+        <div class="sub">发现同学们的精选分享：图文、视频、链接与实用附件。</div>
+        <div class="heroBadges">
+          <span class="badge">当前共 {{ shares.length }} 条</span>
+          <span class="badge">支持多媒体</span>
+          <span class="badge">可评论互动</span>
+        </div>
       </div>
 
       <router-link class="publishBtn" to="/shares/publish">
@@ -139,16 +144,16 @@ onMounted(() => {
       <div class="filters">
         <el-input
           v-model="searchKeyword"
-          placeholder="搜索分享..."
+          placeholder="搜索标题或内容..."
           :prefix-icon="Search"
           clearable
-          style="width: 280px;"
+          class="searchInput"
           @keyup.enter="load"
         />
-        <el-select v-model="filterType" placeholder="选择类型" clearable style="width: 160px;">
+        <el-select v-model="filterType" placeholder="选择类型" clearable class="typeSelect">
           <el-option v-for="type in mediaTypes" :key="type.value" :label="type.label" :value="type.value" />
         </el-select>
-        <el-button type="primary" :icon="Search" @click="load">搜索</el-button>
+        <el-button type="primary" :icon="Search" class="searchBtn" @click="load">立即筛选</el-button>
       </div>
     </el-card>
 
@@ -176,13 +181,21 @@ onMounted(() => {
             </div>
             <div v-else class="emptyMedia">
               <el-icon><Document /></el-icon>
+              <span>文字分享</span>
+            </div>
+
+            <div class="floatingTag">
+              <el-tag size="small" :type="getTypeTagType(it.mediaType)">
+                <el-icon><component :is="getTypeIcon(it.mediaType)" /></el-icon>
+                {{ it.mediaType || 'NONE' }}
+              </el-tag>
             </div>
           </div>
 
           <div class="body">
             <div class="cardTitle">{{ it.title }}</div>
             <div v-if="it._text" class="desc">{{ it._text }}</div>
-            
+
             <a
               v-if="previewKind(it) === 'file'"
               class="fileBtn"
@@ -195,13 +208,10 @@ onMounted(() => {
               <el-icon><Download /></el-icon>
               下载附件
             </a>
-            
+
             <div class="meta">
-              <el-tag size="small" :type="getTypeTagType(it.mediaType)">
-                <el-icon><component :is="getTypeIcon(it.mediaType)" /></el-icon>
-                {{ it.mediaType || 'NONE' }}
-              </el-tag>
-              <el-tag size="small" type="info">ID {{ it.id }}</el-tag>
+              <span class="metaId">#{{ it.id }}</span>
+              <span class="metaMore">点击查看详情</span>
             </div>
           </div>
         </el-card>
@@ -209,7 +219,7 @@ onMounted(() => {
     </div>
 
     <div v-if="!loading && shares.length === 0" class="empty">
-      <el-empty description="暂无分享">
+      <el-empty description="暂无分享，来当第一个发布者吧">
         <router-link to="/shares/publish">
           <el-button type="primary">去发布第一个分享</el-button>
         </router-link>
@@ -219,17 +229,32 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.head {
+.shareListPage {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hero {
+  border-radius: 18px;
+  padding: 18px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.14), rgba(16, 185, 129, 0.16));
+  border: 1px solid rgba(148, 163, 184, 0.24);
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
-  gap: 12px;
-  margin: 6px 0 14px;
+  align-items: center;
+  gap: 16px;
   flex-wrap: wrap;
 }
 
+.heroMain {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .title {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 900;
   display: flex;
   align-items: center;
@@ -237,33 +262,47 @@ onMounted(() => {
 }
 
 .sub {
-  margin-top: 4px;
   color: var(--muted);
   font-size: 13px;
 }
 
+.heroBadges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  color: var(--text);
+}
+
 .publishBtn {
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary), #6366f1);
   color: #fff;
   border: 0;
   padding: 10px 18px;
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   cursor: pointer;
   text-decoration: none;
   display: flex;
   align-items: center;
   gap: 6px;
-  font-weight: 500;
-  transition: background-color 0.15s ease, transform 0.15s ease;
+  font-weight: 700;
+  transition: transform 0.15s ease, filter 0.15s ease;
 }
 
 .publishBtn:hover {
-  background: var(--primary-hover);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  filter: brightness(1.03);
 }
 
 .filterCard {
-  margin-bottom: 14px;
+  border-radius: 14px;
 }
 
 .filters {
@@ -273,32 +312,22 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
+.searchInput {
+  width: 340px;
+}
+
+.typeSelect {
+  width: 170px;
+}
+
+.searchBtn {
+  border-radius: 10px;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
-}
-
-@media (max-width: 1100px) {
-  .grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 520px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .filters {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .filters .el-input,
-  .filters .el-select {
-    width: 100% !important;
-  }
 }
 
 .card {
@@ -309,15 +338,18 @@ onMounted(() => {
 
 .cardInner {
   height: 100%;
-  transition: transform 0.15s ease;
+  border-radius: 14px;
+  overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .cardInner:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.12);
 }
 
 .media {
-  height: 180px;
+  height: 190px;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border-2);
   display: flex;
@@ -347,14 +379,14 @@ onMounted(() => {
 .videoOverlay {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .playIcon {
-  font-size: 48px;
+  font-size: 44px;
   color: #fff;
 }
 
@@ -368,7 +400,7 @@ onMounted(() => {
 }
 
 .linkIcon {
-  font-size: 40px;
+  font-size: 38px;
   color: var(--primary);
 }
 
@@ -381,7 +413,21 @@ onMounted(() => {
 
 .emptyMedia {
   color: var(--muted);
-  font-size: 40px;
+  font-size: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.emptyMedia span {
+  font-size: 12px;
+}
+
+.floatingTag {
+  position: absolute;
+  top: 10px;
+  left: 10px;
 }
 
 .body {
@@ -398,27 +444,20 @@ onMounted(() => {
 .desc {
   color: var(--muted);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.55;
   display: -webkit-box;
-  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  margin-bottom: 10px;
-}
-
-.meta {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  align-items: center;
+  margin-bottom: 12px;
+  min-height: 40px;
 }
 
 .fileBtn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin: 6px 0 10px;
+  margin: 0 0 10px;
   padding: 6px 12px;
   border-radius: 999px;
   border: 1px solid var(--border-2);
@@ -435,7 +474,42 @@ onMounted(() => {
   border-color: var(--primary);
 }
 
+.meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.metaId {
+  font-weight: 700;
+}
+
 .empty {
-  margin-top: 18px;
+  margin-top: 8px;
+}
+
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .searchInput,
+  .typeSelect,
+  .searchBtn {
+    width: 100%;
+  }
 }
 </style>

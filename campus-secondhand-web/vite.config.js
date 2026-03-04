@@ -54,7 +54,7 @@ export default defineConfig({
   },
   server: {
     host: true,
-    port: 5173,
+    port: 3001,
     strictPort: true,
     allowedHosts: ['localhost', '127.0.0.1', 'all.zjpnb.dpdns.org', 'www.zjpnb.dpdns.org'],
     headers: tunnelHost ? {} : { 'Cache-Control': 'no-store' },
@@ -84,7 +84,7 @@ export default defineConfig({
   },
   preview: {
     host: true,
-    port: 5173,
+    port: 3001,
     strictPort: true,
     allowedHosts: ['localhost', '127.0.0.1', 'all.zjpnb.dpdns.org', 'www.zjpnb.dpdns.org'],
     proxy: {

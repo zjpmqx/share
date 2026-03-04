@@ -15,24 +15,24 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 
 app.use(ElementPlus)
 
-app.config.warnHandler = (msg, instance, trace) => {
-  console.warn('[vue-warn]', msg, trace)
-  console.warn('[vue-warn-stack]', new Error().stack)
-}
-
-app.config.errorHandler = (err, instance, info) => {
-  console.error('[vue-error]', info, err)
-}
-
-window.addEventListener('error', (e) => {
-  console.error('[window-error]', e.error || e.message)
-})
-
-window.addEventListener('unhandledrejection', (e) => {
-  console.error('[unhandledrejection]', e.reason)
-})
-
 if (import.meta?.env?.DEV) {
+  app.config.warnHandler = (msg, instance, trace) => {
+    console.warn('[vue-warn]', msg, trace)
+    console.warn('[vue-warn-stack]', new Error().stack)
+  }
+
+  app.config.errorHandler = (err, instance, info) => {
+    console.error('[vue-error]', info, err)
+  }
+
+  window.addEventListener('error', (e) => {
+    console.error('[window-error]', e.error || e.message)
+  })
+
+  window.addEventListener('unhandledrejection', (e) => {
+    console.error('[unhandledrejection]', e.reason)
+  })
+
   ensureEvents()
 }
 

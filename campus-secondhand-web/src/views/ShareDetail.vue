@@ -81,8 +81,16 @@ async function doUploadImage() {
   uploadImageError.value = ''
   try {
     const resp = await uploadFile(imageFile.value)
+    
+    if (resp?.code !== 0) {
+      throw new Error(resp?.message || '上传失败')
+    }
+    
     const url = resp?.data
-    if (!url) throw new Error('上传失败：未返回地址')
+    if (!url || typeof url !== 'string') {
+      throw new Error('上传失败：未返回有效地址')
+    }
+    
     imageUrl.value = url
     ElMessage.success('图片上传成功')
   } catch (e) {
@@ -200,9 +208,9 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page detailPage">
     <el-skeleton v-if="loading" :rows="8" animated />
-    
+
     <div v-else-if="errorMsg" class="errorState">
       <el-result icon="error" title="加载失败" :sub-title="errorMsg">
         <template #extra>
@@ -211,211 +219,242 @@ onMounted(async () => {
       </el-result>
     </div>
 
-    <div v-else-if="share" class="layout">
-      <div class="left">
-        <el-card class="mediaCard">
-          <template #header>
-            <div class="mediaHeader">
-              <span class="mediaTitle">分享内容</span>
-              <el-tag :type="getTypeTagType(share.mediaType)" size="small">
-                <el-icon><component :is="getTypeIcon(share.mediaType)" /></el-icon>
-                {{ share.mediaType || 'NONE' }}
-              </el-tag>
-            </div>
-          </template>
-          
-          <div class="mediaBox">
-            <el-image
-              v-if="showCover(share)"
-              :src="share._cover"
-              fit="contain"
-              :preview-src-list="[share._cover]"
-              lazy
-            />
-
-            <el-image
-              v-else-if="mediaKind(share) === 'image'"
-              :src="share.mediaUrl"
-              fit="contain"
-              :preview-src-list="[share.mediaUrl]"
-              lazy
-            />
-
-            <video v-else-if="mediaKind(share) === 'video'" controls :src="share.mediaUrl"></video>
-
-            <div v-else class="emptyMedia">
-              <el-icon><Document /></el-icon>
-              <span>纯文字分享</span>
-            </div>
-          </div>
-
-          <div v-if="mediaKind(share) === 'file'" class="mediaActions">
-            <el-button type="primary" :icon="Download">
-              <a
-                :href="share.mediaUrl"
-                target="_blank"
-                rel="noopener noreferrer"
-                :download="(share?.mediaUrl || '').split('/').pop() || 'attachment'"
-                style="color: inherit; text-decoration: none;"
-              >
-                下载附件
-              </a>
-            </el-button>
-          </div>
-
-          <div v-else-if="mediaKind(share) === 'link'" class="mediaActions">
-            <el-button type="primary" :icon="Link">
-              <a :href="share.linkUrl" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;">
-                打开链接
-              </a>
-            </el-button>
-          </div>
-        </el-card>
+    <div v-else-if="share" class="detailWrap">
+      <div class="heroInfo">
+        <h1 class="title">{{ share.title }}</h1>
+        <div class="heroMeta">
+          <el-tag :type="getTypeTagType(share.mediaType)" size="small">
+            <el-icon><component :is="getTypeIcon(share.mediaType)" /></el-icon>
+            {{ share.mediaType || 'NONE' }}
+          </el-tag>
+          <span class="heroHint">分享详情与评论互动</span>
+        </div>
       </div>
 
-      <div class="right">
-        <el-card class="infoCard">
-          <template #header>
-            <h1 class="title">{{ share.title }}</h1>
-          </template>
-          
-          <div class="desc">{{ share._text || '（无内容）' }}</div>
-        </el-card>
+      <div class="layout">
+        <div class="left">
+          <el-card class="mediaCard" shadow="never">
+            <div class="mediaBox">
+              <el-image
+                v-if="showCover(share)"
+                :src="share._cover"
+                fit="contain"
+                :preview-src-list="[share._cover]"
+                lazy
+              />
 
-        <el-card class="commentsCard" style="margin-top: 14px;">
-          <template #header>
-            <div class="commentsHeader">
-              <span class="commentsTitle">评论 ({{ comments.length }})</span>
-            </div>
-          </template>
+              <el-image
+                v-else-if="mediaKind(share) === 'image'"
+                :src="share.mediaUrl"
+                fit="contain"
+                :preview-src-list="[share.mediaUrl]"
+                lazy
+              />
 
-          <el-skeleton v-if="commentsLoading" :rows="4" animated />
+              <video v-else-if="mediaKind(share) === 'video'" controls :src="share.mediaUrl"></video>
 
-          <div v-else class="msgs">
-            <div v-for="m in comments" :key="m.id" class="msg">
-              <div class="msgHead">
-                <el-avatar :size="32">
-                  <img v-if="m.avatarUrl" :src="m.avatarUrl" alt="" />
-                  <template v-else>
-                    <el-icon><User /></el-icon>
-                  </template>
-                </el-avatar>
-                <div class="who">{{ m.userName || ('用户' + (m.userId || '')) }}</div>
+              <div v-else class="emptyMedia">
+                <el-icon><Document /></el-icon>
+                <span>纯文字分享</span>
               </div>
-              
-              <div class="msgContent">
-                <div v-if="m?._parts?.text" class="msgText">{{ m._parts.text }}</div>
-                <div v-if="m?._parts?.images?.length" class="msgImages">
-                  <el-image
-                    v-for="(u, idx) in m._parts.images"
-                    :key="idx"
-                    :src="u"
-                    :preview-src-list="m._parts.images"
-                    :initial-index="idx"
-                    fit="cover"
-                    lazy
-                    class="msgImg"
-                  />
+            </div>
+
+            <div v-if="mediaKind(share) === 'file'" class="mediaActions">
+              <el-button type="primary" :icon="Download" class="actionBtn">
+                <a
+                  :href="share.mediaUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  :download="(share?.mediaUrl || '').split('/').pop() || 'attachment'"
+                  class="actionLink"
+                >
+                  下载附件
+                </a>
+              </el-button>
+            </div>
+
+            <div v-else-if="mediaKind(share) === 'link'" class="mediaActions">
+              <el-button type="primary" :icon="Link" class="actionBtn">
+                <a :href="share.linkUrl" target="_blank" rel="noopener noreferrer" class="actionLink">
+                  打开链接
+                </a>
+              </el-button>
+            </div>
+          </el-card>
+
+          <el-card class="infoCard" shadow="never">
+            <div class="desc">{{ share._text || '（无内容）' }}</div>
+          </el-card>
+        </div>
+
+        <div class="right">
+          <el-card class="commentsCard" shadow="never">
+            <template #header>
+              <div class="commentsHeader">
+                <span class="commentsTitle">评论区</span>
+                <el-tag type="info" size="small">{{ comments.length }} 条</el-tag>
+              </div>
+            </template>
+
+            <el-skeleton v-if="commentsLoading" :rows="4" animated />
+
+            <div v-else class="msgs">
+              <div v-for="m in comments" :key="m.id" class="msg">
+                <div class="msgHead">
+                  <el-avatar :size="32">
+                    <img v-if="m.avatarUrl" :src="m.avatarUrl" alt="" />
+                    <template v-else>
+                      <el-icon><User /></el-icon>
+                    </template>
+                  </el-avatar>
+                  <div class="who">{{ m.userName || ('用户' + (m.userId || '')) }}</div>
                 </div>
+
+                <div class="msgContent">
+                  <div v-if="m?._parts?.text" class="msgText">{{ m._parts.text }}</div>
+                  <div v-if="m?._parts?.images?.length" class="msgImages">
+                    <el-image
+                      v-for="(u, idx) in m._parts.images"
+                      :key="idx"
+                      :src="u"
+                      :preview-src-list="m._parts.images"
+                      :initial-index="idx"
+                      fit="cover"
+                      lazy
+                      class="msgImg"
+                    />
+                  </div>
+                </div>
+
+                <div class="msgTime">{{ m.createdAt || '' }}</div>
               </div>
-              
-              <div class="msgTime">{{ m.createdAt || '' }}</div>
+
+              <el-empty v-if="comments.length === 0" description="暂无评论，快来抢沙发" :image-size="80" />
             </div>
-            
-            <el-empty v-if="comments.length === 0" description="暂无评论" :image-size="80" />
-          </div>
 
-          <div class="composer">
-            <el-input
-              v-model="content"
-              type="textarea"
-              :rows="2"
-              placeholder="说点什么..."
-              :disabled="!getToken() || posting"
-            />
+            <div class="composer">
+              <el-input
+                v-model="content"
+                type="textarea"
+                :rows="3"
+                placeholder="说点什么..."
+                :disabled="!getToken() || posting"
+              />
 
-            <input ref="imageInput" class="imgPick" type="file" accept="image/*" @change="onPickImage" />
+              <input ref="imageInput" class="imgPick" type="file" accept="image/*" @change="onPickImage" />
 
-            <div class="actions">
-              <el-button :icon="Picture" :disabled="!getToken() || posting || uploadingImage" @click="openImagePicker">
-                {{ uploadingImage ? '上传中' : '图片' }}
-              </el-button>
-              <el-button type="primary" :icon="ChatDotRound" :disabled="!getToken() || posting || uploadingImage" @click="send" :loading="posting">
-                {{ posting ? '发送中...' : '发送' }}
-              </el-button>
+              <div class="actions">
+                <el-button :icon="Picture" :disabled="!getToken() || posting || uploadingImage" @click="openImagePicker">
+                  {{ uploadingImage ? '上传中' : '添加图片' }}
+                </el-button>
+                <el-button type="primary" :icon="ChatDotRound" :disabled="!getToken() || posting || uploadingImage" @click="send" :loading="posting">
+                  {{ posting ? '发送中...' : '发表评论' }}
+                </el-button>
+              </div>
             </div>
-          </div>
 
-          <div v-if="uploadImageError || imageUrl" class="composerMeta">
-            <el-alert v-if="uploadImageError" type="error" :closable="false" style="margin-bottom: 10px;">
-              {{ uploadImageError }}
+            <div v-if="uploadImageError || imageUrl" class="composerMeta">
+              <el-alert v-if="uploadImageError" type="error" :closable="false" style="margin-bottom: 10px;">
+                {{ uploadImageError }}
+              </el-alert>
+
+              <div v-if="imageUrl" class="imgPreview">
+                <el-image :src="imageUrl" class="imgPreviewImg" fit="cover" />
+                <span class="imgPreviewText">已添加图片</span>
+                <el-button size="small" :disabled="posting || uploadingImage" @click="clearImage">移除</el-button>
+              </div>
+            </div>
+
+            <el-alert v-if="!getToken()" type="warning" :closable="false" style="margin-top: 10px;">
+              登录后才能评论
             </el-alert>
-            
-            <div v-if="imageUrl" class="imgPreview">
-              <el-image :src="imageUrl" class="imgPreviewImg" fit="cover" />
-              <span class="imgPreviewText">已添加图片</span>
-              <el-button size="small" :disabled="posting || uploadingImage" @click="clearImage">移除</el-button>
-            </div>
-          </div>
-          
-          <el-alert v-if="!getToken()" type="warning" :closable="false" style="margin-top: 10px;">
-            登录后才能评论
-          </el-alert>
-        </el-card>
+          </el-card>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.layout {
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
+.detailPage {
+  display: flex;
+  flex-direction: column;
   gap: 14px;
 }
 
-@media (max-width: 900px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-.mediaCard {
-  overflow: hidden;
-}
-
-.mediaHeader {
+.detailWrap {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.mediaTitle {
-  font-weight: 600;
+.heroInfo {
+  border-radius: 18px;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.14), rgba(16, 185, 129, 0.14));
+  border: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.title {
+  font-size: 24px;
+  margin: 0;
+  font-weight: 800;
+}
+
+.heroMeta {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.heroHint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 14px;
+}
+
+.left,
+.right {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mediaCard,
+.infoCard,
+.commentsCard {
+  border-radius: 14px;
 }
 
 .mediaBox {
   width: 100%;
-  min-height: 320px;
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.10), rgba(59, 130, 246, 0.08));
+  min-height: 340px;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(59, 130, 246, 0.09));
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
 }
 
 .mediaBox :deep(.el-image) {
   width: 100%;
   height: 100%;
-  min-height: 320px;
+  min-height: 340px;
 }
 
 .mediaBox video {
   width: 100%;
-  max-height: 420px;
+  max-height: 480px;
   display: block;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .emptyMedia {
@@ -428,7 +467,7 @@ onMounted(async () => {
 }
 
 .emptyMedia .el-icon {
-  font-size: 48px;
+  font-size: 46px;
 }
 
 .mediaActions {
@@ -437,27 +476,31 @@ onMounted(async () => {
   justify-content: center;
 }
 
-.title {
-  font-size: 20px;
-  margin: 0;
-  font-weight: 700;
+.actionBtn {
+  border-radius: 10px;
+}
+
+.actionLink {
+  color: inherit;
+  text-decoration: none;
 }
 
 .desc {
-  padding: 10px 0;
-  line-height: 1.8;
+  line-height: 1.85;
   color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
+  font-size: 14px;
 }
 
 .commentsHeader {
   display: flex;
   align-items: center;
+  justify-content: space-between;
 }
 
 .commentsTitle {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .msgs {
@@ -465,6 +508,9 @@ onMounted(async () => {
   flex-direction: column;
   gap: 12px;
   margin-bottom: 14px;
+  max-height: 540px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .msg {
@@ -483,7 +529,7 @@ onMounted(async () => {
 
 .who {
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 
@@ -501,12 +547,6 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
-}
-
-@media (max-width: 520px) {
-  .msgImages {
-    grid-template-columns: repeat(3, 1fr);
-  }
 }
 
 .msgImg {
@@ -568,5 +608,29 @@ onMounted(async () => {
 
 .errorState {
   margin-top: 40px;
+}
+
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .title {
+    font-size: 20px;
+  }
+
+  .msgImages {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .actions {
+    flex-direction: column;
+  }
+
+  .actions .el-button {
+    width: 100%;
+  }
 }
 </style>

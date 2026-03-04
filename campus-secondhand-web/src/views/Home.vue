@@ -131,24 +131,34 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page homePage">
     <div class="ticker" aria-label="online-ticker">
       <div class="tickerTrack">
         <div class="tickerText">
-          <el-icon style="margin-right: 6px; vertical-align: -2px;"><User /></el-icon>
-          {{ tickerText }}
+          <el-icon class="tickerIcon"><User /></el-icon>
+          {{ tickerText }} · 今日推荐：先看成色再看价格，快乐捡漏～
         </div>
       </div>
     </div>
 
     <div class="hero">
-      <div class="heroTitle">
-        <el-icon style="margin-right: 8px; color: var(--primary);"><ShoppingCart /></el-icon>
-        淘好物
+      <div class="heroLeft">
+        <div class="heroTitle">
+          <el-icon class="heroCartIcon"><ShoppingCart /></el-icon>
+          淘好物
+          <span class="heroEmoji">(๑•̀ㅂ•́)و✧</span>
+        </div>
+        <div class="heroSub">校园二手 · 省钱也有好品质</div>
+        <div class="heroBadges">
+          <span class="badge">实时在线 {{ onlineUsers }}</span>
+          <span class="badge">当前商品 {{ items.length }}</span>
+          <span class="badge">支持多条件筛选</span>
+        </div>
       </div>
-      <div class="heroSub">校园二手 · 省钱也有好品质</div>
 
-      <el-card class="searchCard" shadow="hover">
+      <el-card class="searchCard" shadow="never">
+        <div class="cardTitleRow">快速淘货</div>
+
         <div class="searchRow">
           <el-input
             v-model="keyword"
@@ -158,23 +168,23 @@ onUnmounted(() => {
             clearable
             @keyup.enter="load"
           />
-          <el-button type="primary" :icon="Search" @click="load">搜索</el-button>
-          <el-button :icon="RefreshRight" @click="resetFilters">重置</el-button>
+          <el-button type="primary" :icon="Search" class="searchBtn" @click="load">搜索</el-button>
+          <el-button :icon="RefreshRight" class="resetBtn" @click="resetFilters">重置</el-button>
         </div>
-        
+
         <div class="filtersRow">
           <el-select v-model="category" placeholder="选择分类" clearable class="filterSelect">
             <el-option v-for="cat in categories" :key="cat.value" :label="cat.label" :value="cat.value" />
           </el-select>
-          
+
           <el-select v-model="conditionLevel" placeholder="选择成色" clearable class="filterSelect">
             <el-option v-for="cond in conditions" :key="cond.value" :label="cond.label" :value="cond.value" />
           </el-select>
-          
+
           <div class="priceFilter">
-            <span class="priceLabel">价格：</span>
+            <span class="priceLabel">价格</span>
             <el-input-number v-model="priceMin" :min="0" placeholder="最低价" :precision="2" size="default" class="priceInput" />
-            <span class="priceSeparator">-</span>
+            <span class="priceSeparator">~</span>
             <el-input-number v-model="priceMax" :min="0" placeholder="最高价" :precision="2" size="default" class="priceInput" />
           </div>
         </div>
@@ -195,12 +205,13 @@ onUnmounted(() => {
           <div class="cover">
             <div class="img">
               <img v-if="it.coverImageUrl" :src="it.coverImageUrl" alt="" loading="lazy" />
-              <el-empty v-else description="暂无图片" :image-size="60" />
+              <el-empty v-else description="暂无图片" :image-size="56" />
+              <div class="floatingPrice">¥{{ it.price }}</div>
             </div>
           </div>
 
           <div class="body">
-            <div class="cardTitle" :title="it.title">{{ it.title }}</div>
+            <div class="productTitle" :title="it.title">{{ it.title }}</div>
 
             <div class="chips">
               <el-tag size="small" type="info">{{ it.category }}</el-tag>
@@ -209,9 +220,7 @@ onUnmounted(() => {
             </div>
 
             <div class="bottom">
-              <div class="price">
-                <span class="priceSymbol">¥</span>{{ it.price }}
-              </div>
+              <div class="priceHint">喜欢就冲～</div>
               <el-button type="primary" size="small" link>查看详情</el-button>
             </div>
           </div>
@@ -220,7 +229,7 @@ onUnmounted(() => {
     </div>
 
     <div v-if="!loading && items.length === 0" class="empty">
-      <el-empty description="暂无商品">
+      <el-empty description="暂无商品，来发一个让同学们眼前一亮吧">
         <el-button type="primary" @click="$router.push('/publish')">去发布商品</el-button>
       </el-empty>
     </div>
@@ -228,12 +237,18 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.homePage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .ticker {
-  margin: 6px 0 10px;
-  background: var(--surface);
-  border: 1px solid var(--border-2);
+  margin: 6px 0 4px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(16, 185, 129, 0.12));
+  border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 12px;
-  padding: 6px 10px;
+  padding: 7px 12px;
 }
 
 .tickerTrack {
@@ -242,11 +257,17 @@ onUnmounted(() => {
 }
 
 .tickerText {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding-left: 100%;
-  animation: marquee 12s linear infinite;
+  animation: marquee 14s linear infinite;
   font-size: 12px;
   color: var(--muted);
+}
+
+.tickerIcon {
+  vertical-align: -2px;
 }
 
 @keyframes marquee {
@@ -259,25 +280,71 @@ onUnmounted(() => {
 }
 
 .hero {
-  margin: 6px 0 14px;
+  margin: 2px 0 6px;
+  border-radius: 18px;
+  padding: 18px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.14), rgba(99, 102, 241, 0.12), rgba(16, 185, 129, 0.13));
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.95fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.heroLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .heroTitle {
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 900;
   letter-spacing: 0.2px;
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.heroCartIcon {
+  color: var(--primary);
+}
+
+.heroEmoji {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f766e;
 }
 
 .heroSub {
-  margin-top: 4px;
   color: var(--muted);
   font-size: 14px;
 }
 
+.heroBadges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.badge {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+}
+
 .searchCard {
-  margin-top: 12px;
+  border-radius: 14px;
+}
+
+.cardTitleRow {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 10px;
 }
 
 .searchRow {
@@ -289,6 +356,11 @@ onUnmounted(() => {
 
 .searchInput {
   flex: 1;
+}
+
+.searchBtn,
+.resetBtn {
+  border-radius: 10px;
 }
 
 .filtersRow {
@@ -306,15 +378,16 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .priceLabel {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--muted);
 }
 
 .priceInput {
-  width: 120px;
+  width: 118px;
 }
 
 .priceSeparator {
@@ -322,51 +395,20 @@ onUnmounted(() => {
 }
 
 .error {
-  margin: 10px 0 12px;
+  margin: 4px 0 2px;
 }
 
 .skeletonContainer {
   padding: 20px;
   background: var(--surface);
-  border-radius: var(--radius);
+  border-radius: 14px;
+  border: 1px solid var(--border-2);
 }
 
 .grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
-}
-
-@media (max-width: 1100px) {
-  .grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 900px) {
-  .grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 520px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .filtersRow {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .filterSelect {
-    width: 100%;
-    min-width: auto;
-  }
-  
-  .priceFilter {
-    width: 100%;
-  }
 }
 
 .itemCard {
@@ -377,11 +419,14 @@ onUnmounted(() => {
 
 .cardInner {
   height: 100%;
-  transition: transform 0.15s ease;
+  border-radius: 14px;
+  overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .cardInner:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: 0 16px 26px rgba(15, 23, 42, 0.12);
 }
 
 .cover {
@@ -389,18 +434,14 @@ onUnmounted(() => {
 }
 
 .img {
-  height: 168px;
+  height: 176px;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border-2);
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-@media (max-width: 520px) {
-  .img {
-    height: 210px;
-  }
+  position: relative;
+  overflow: hidden;
 }
 
 .img img {
@@ -410,19 +451,31 @@ onUnmounted(() => {
   display: block;
 }
 
+.floatingPrice {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  background: rgba(239, 68, 68, 0.9);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
 .body {
   padding: 12px;
 }
 
-.cardTitle {
+.productTitle {
   font-weight: 800;
   margin-bottom: 10px;
   line-height: 1.35;
   display: -webkit-box;
-  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  min-height: 38px;
 }
 
 .chips {
@@ -438,17 +491,63 @@ onUnmounted(() => {
   justify-content: space-between;
 }
 
-.price {
-  font-size: 22px;
-  font-weight: 900;
-  color: #ef4444;
-}
-
-.priceSymbol {
-  font-size: 16px;
+.priceHint {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .empty {
-  margin-top: 18px;
+  margin-top: 8px;
+}
+
+@media (max-width: 1200px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    padding: 14px;
+  }
+
+  .heroTitle {
+    font-size: 24px;
+  }
+
+  .searchRow,
+  .filtersRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .searchBtn,
+  .resetBtn,
+  .filterSelect,
+  .priceInput {
+    width: 100%;
+  }
+
+  .priceFilter {
+    width: 100%;
+  }
+
+  .img {
+    height: 210px;
+  }
 }
 </style>

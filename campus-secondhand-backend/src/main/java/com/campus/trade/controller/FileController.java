@@ -67,7 +67,8 @@ public class FileController {
 
     // Cloudflare 之类的代理对长连接有超时（常见 100s）限制；大文件分片合并容易触发 524。
     // 这里对超过阈值的分片合并改为异步，前端轮询结果获取最终 url。
-    private static final long ASYNC_COMPLETE_THRESHOLD_BYTES = 8L * 1024 * 1024;
+    private static final long ASYNC_COMPLETE_THRESHOLD_BYTES = 64L * 1024 * 1024;
+    private static final int MERGE_BUFFER_SIZE = 1024 * 1024;
 
     private static final Set<String> IMAGE_CONTENT_TYPES = Set.of(
             "image/jpeg",
@@ -527,7 +528,11 @@ public class FileController {
                 long chunkLen = Files.size(chunk);
                 written += chunkLen;
                 try (InputStream in = Files.newInputStream(chunk, StandardOpenOption.READ)) {
-                    in.transferTo(out);
+                    byte[] buffer = new byte[MERGE_BUFFER_SIZE];
+                    int read;
+                    while ((read = in.read(buffer)) >= 0) {
+                        out.write(buffer, 0, read);
+                    }
                 }
             }
         } catch (Exception e) {

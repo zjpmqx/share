@@ -1,5 +1,6 @@
 const TOKEN_KEY = 'campus_trade_token'
 const ROLE_KEY = 'campus_trade_role'
+const SHARE_GATE_TOKEN_KEY = 'campus_share_gate_token'
 
 function notifyAuthChanged() {
   try {
@@ -29,5 +30,18 @@ export function getRole() {
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(ROLE_KEY)
+  localStorage.removeItem(SHARE_GATE_TOKEN_KEY)
   notifyAuthChanged()
+}
+
+export function setShareGateToken(token) {
+  localStorage.setItem(SHARE_GATE_TOKEN_KEY, token)
+}
+
+export function getShareGateToken() {
+  return localStorage.getItem(SHARE_GATE_TOKEN_KEY)
+}
+
+export function clearShareGateToken() {
+  localStorage.removeItem(SHARE_GATE_TOKEN_KEY)
 }

@@ -1,8 +1,16 @@
 server:
   port: 18081
+  compression:
+    enabled: true
+    min-response-size: 1024
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain,text/css,application/javascript
   tomcat:
     max-http-form-post-size: -1
     max-swallow-size: -1
+    threads:
+      max: 300
+      min-spare: 20
+    accept-count: 200
     accesslog:
       enabled: true
       directory: logs
@@ -32,10 +40,17 @@ app:
   jwt:
     secret: "CHANGE_ME_CHANGE_ME_CHANGE_ME_CHANGE_ME_CHANGE_ME_32_BYTES_MIN"
     expire-seconds: 604800
+  share-gate:
+    passphrase: "CHANGE_ME_SHARE_GATE_PASSPHRASE"
+    token-expire-seconds: 86400
+    verify-window-seconds: 60
+    verify-max-requests: 20
+    fail-max-attempts: 5
+    fail-ban-seconds: 900
   upload:
     dir: uploads
     max-bytes: 4294967296
-    chunk-max-bytes: 33554432
+    chunk-max-bytes: 67108864
   cleanup:
     cron: "0 */10 * * * *"          # 每10分钟跑一次
     chunk-ttl-seconds: 21600        # 分片上传目录超过6小时没动就删

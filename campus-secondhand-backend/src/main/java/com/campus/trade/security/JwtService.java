@@ -48,4 +48,28 @@ public class JwtService {
                 .parseClaimsJws(token)
                 .getBody();
     }
+
+    public String generateShareGateToken(long expireSeconds) {
+        Instant now = Instant.now();
+        Date issuedAt = Date.from(now);
+        Date exp = Date.from(now.plusSeconds(Math.max(60, expireSeconds)));
+
+        return Jwts.builder()
+                .setSubject("share-gate")
+                .setIssuedAt(issuedAt)
+                .setExpiration(exp)
+                .claim("scope", "SHARE_GATE")
+                .signWith(secretKey, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public boolean isValidShareGateToken(String token) {
+        try {
+            Claims claims = parseClaims(token);
+            return "share-gate".equals(claims.getSubject())
+                    && "SHARE_GATE".equals(String.valueOf(claims.get("scope")));
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
 }

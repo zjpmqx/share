@@ -17,10 +17,8 @@ import AdminItems from '../views/AdminItems.vue'
 import AdminShares from '../views/AdminShares.vue'
 import AdminUsers from '../views/AdminUsers.vue'
 import Profile from '../views/Profile.vue'
-import { clearToken, getRole, getToken, setRole } from '../services/auth'
+import { clearToken, getRole, getToken, getShareGateToken, setRole } from '../services/auth'
 import { me } from '../services/api'
-
-const SHARE_GATE_KEY = 'share_gate_ok'
 
 const routes = [
   {
@@ -64,8 +62,8 @@ router.beforeEach(async (to) => {
 
   if (to.path.startsWith('/shares') && to.name !== 'shareVerify') {
     try {
-      const ok = localStorage.getItem(SHARE_GATE_KEY) === '1'
-      if (!ok) {
+      const shareGateToken = getShareGateToken()
+      if (!shareGateToken) {
         return { name: 'shareVerify', query: { redirect: to.fullPath } }
       }
     } catch {
