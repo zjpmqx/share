@@ -87,11 +87,11 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="page">
+  <div class="page admin-page">
     <div class="head">
       <div>
         <div class="title">商品管理</div>
-        <div class="sub">管理员可对商品执行下架/删除操作。删除将清理图片/留言/订单及本地文件。</div>
+        <div class="sub">支持筛选、批量下架与清理，保持交易环境健康有序。</div>
       </div>
       <div class="ops">
         <select v-model="status" class="select" :disabled="loading" @change="load">
@@ -143,6 +143,10 @@ onMounted(load)
 </template>
 
 <style scoped>
+.admin-page {
+  color: var(--admin-text);
+}
+
 .head {
   display: flex;
   justify-content: space-between;
@@ -154,12 +158,11 @@ onMounted(load)
 .title {
   font-size: 20px;
   font-weight: 900;
-  color: #fff;
 }
 
 .sub {
   margin-top: 4px;
-  color: rgba(255, 255, 255, 0.66);
+  color: var(--admin-muted);
   font-size: 13px;
 }
 
@@ -170,9 +173,9 @@ onMounted(load)
 }
 
 .select {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  color: rgba(255, 255, 255, 0.9);
+  background: #ffffff;
+  border: 1px solid var(--admin-border);
+  color: var(--admin-text);
   padding: 8px 10px;
   border-radius: 12px;
   outline: none;
@@ -185,10 +188,16 @@ onMounted(load)
 }
 
 .card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border-soft);
+  border-radius: 18px;
   padding: 12px;
+  box-shadow: var(--admin-shadow);
+  transition: transform 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
 }
 
 .row {
@@ -203,7 +212,6 @@ onMounted(load)
 
 .name {
   font-weight: 900;
-  color: #fff;
   margin-bottom: 8px;
 }
 
@@ -212,14 +220,14 @@ onMounted(load)
   flex-wrap: wrap;
   gap: 8px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
 }
 
 .chip {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
   padding: 4px 8px;
   border-radius: 999px;
+  color: #334155;
 }
 
 .actions {
@@ -229,31 +237,28 @@ onMounted(load)
 }
 
 .ghost {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  color: rgba(255, 255, 255, 0.9);
+  background: #ffffff;
+  border: 1px solid var(--admin-border);
+  color: var(--admin-text);
   padding: 8px 12px;
   border-radius: 12px;
-  cursor: pointer;
 }
 
 .warn {
-  background: rgba(234, 179, 8, 0.14);
-  border: 1px solid rgba(234, 179, 8, 0.22);
-  color: #fde68a;
+  background: linear-gradient(90deg, #fef3c7, #fde68a);
+  border: 1px solid #fcd34d;
+  color: #92400e;
   padding: 8px 12px;
   border-radius: 12px;
-  cursor: pointer;
   white-space: nowrap;
 }
 
 .danger {
-  background: rgba(185, 28, 28, 0.16);
-  border: 1px solid rgba(185, 28, 28, 0.28);
-  color: #fecaca;
+  background: linear-gradient(90deg, #ffe4e6, #fecdd3);
+  border: 1px solid #fda4af;
+  color: #9f1239;
   padding: 8px 12px;
   border-radius: 12px;
-  cursor: pointer;
   white-space: nowrap;
 }
 
@@ -266,20 +271,20 @@ onMounted(load)
 .error {
   margin: 10px 0 12px;
   padding: 10px 12px;
-  background: rgba(185, 28, 28, 0.08);
-  border: 1px solid rgba(185, 28, 28, 0.18);
-  border-radius: 14px;
-  color: #fecaca;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  border-radius: 12px;
+  color: #be123c;
   font-size: 13px;
 }
 
-.muted {
-  color: rgba(255, 255, 255, 0.66);
+.muted,
+.empty {
+  color: var(--admin-muted);
 }
 
 .empty {
   margin-top: 14px;
   text-align: center;
-  color: rgba(255, 255, 255, 0.66);
 }
 </style>

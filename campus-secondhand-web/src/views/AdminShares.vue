@@ -42,13 +42,16 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="page">
+  <div class="page admin-page">
     <div class="head">
       <div>
         <div class="title">好物分享管理</div>
-        <div class="sub">管理员可删除违规/无效分享，删除后会同时清理本地上传文件。</div>
+        <div class="sub">集中处理违规内容，自动联动清理关联媒体文件。</div>
       </div>
-      <button class="ghost" type="button" :disabled="loading" @click="load">刷新</button>
+      <div class="headRight">
+        <div class="tag">共 {{ shares.length }} 条</div>
+        <button class="ghost" type="button" :disabled="loading" @click="load">刷新</button>
+      </div>
     </div>
 
     <div v-if="errorMsg" class="error">{{ errorMsg }}</div>
@@ -83,6 +86,10 @@ onMounted(load)
 </template>
 
 <style scoped>
+.admin-page {
+  color: var(--admin-text);
+}
+
 .head {
   display: flex;
   justify-content: space-between;
@@ -91,16 +98,34 @@ onMounted(load)
   margin: 6px 0 14px;
 }
 
+.headRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .title {
   font-size: 20px;
   font-weight: 900;
-  color: #fff;
 }
 
 .sub {
   margin-top: 4px;
-  color: rgba(255, 255, 255, 0.66);
+  color: var(--admin-muted);
   font-size: 13px;
+}
+
+.tag {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ddd6fe, #dbeafe);
+  color: #312e81;
+  border: 1px solid #c4b5fd;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .list {
@@ -110,10 +135,11 @@ onMounted(load)
 }
 
 .card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border-soft);
+  border-radius: 18px;
   padding: 12px;
+  box-shadow: var(--admin-shadow);
 }
 
 .row {
@@ -128,7 +154,6 @@ onMounted(load)
 
 .name {
   font-weight: 900;
-  color: #fff;
   margin-bottom: 8px;
 }
 
@@ -137,39 +162,37 @@ onMounted(load)
   flex-wrap: wrap;
   gap: 8px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
   margin-bottom: 8px;
 }
 
 .chip {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #eef2ff;
+  border: 1px solid #ddd6fe;
   padding: 4px 8px;
   border-radius: 999px;
+  color: #3730a3;
 }
 
 .url {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.68);
+  color: var(--admin-muted);
   word-break: break-all;
 }
 
 .ghost {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  color: rgba(255, 255, 255, 0.9);
+  background: #ffffff;
+  border: 1px solid var(--admin-border);
+  color: var(--admin-text);
   padding: 8px 12px;
   border-radius: 12px;
-  cursor: pointer;
 }
 
 .danger {
-  background: rgba(185, 28, 28, 0.16);
-  border: 1px solid rgba(185, 28, 28, 0.28);
-  color: #fecaca;
+  background: linear-gradient(90deg, #ffe4e6, #fecdd3);
+  border: 1px solid #fda4af;
+  color: #9f1239;
   padding: 8px 12px;
   border-radius: 12px;
-  cursor: pointer;
   white-space: nowrap;
 }
 
@@ -181,17 +204,21 @@ onMounted(load)
 .error {
   margin: 10px 0 12px;
   padding: 10px 12px;
-  background: rgba(185, 28, 28, 0.08);
-  border: 1px solid rgba(185, 28, 28, 0.18);
-  border-radius: 14px;
-  color: #fecaca;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  border-radius: 12px;
+  color: #be123c;
   font-size: 13px;
+}
+
+.empty,
+.muted {
+  color: var(--admin-muted);
 }
 
 .empty {
   margin-top: 14px;
   text-align: center;
-  color: rgba(255, 255, 255, 0.66);
 }
 
 .emptyTitle {

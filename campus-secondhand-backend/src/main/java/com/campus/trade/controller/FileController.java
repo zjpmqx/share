@@ -454,10 +454,6 @@ public class FileController {
                 if (!VIDEO_CONTENT_TYPES.contains(contentType)) {
                     throw new IllegalArgumentException("Invalid Content-Type");
                 }
-            } else {
-                if (!ARCHIVE_CONTENT_TYPES.contains(contentType)) {
-                    throw new IllegalArgumentException("Invalid Content-Type");
-                }
             }
         }
 

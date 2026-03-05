@@ -1,27 +1,55 @@
 import { http } from './http'
 
+function stripTrailingSlash(v) {
+  return String(v || '').replace(/\/+$/, '')
+}
+
+function isLocalHost(host) {
+  const h = String(host || '').toLowerCase()
+  return h === 'localhost' || h === '127.0.0.1' || h.startsWith('192.168.') || h.startsWith('10.') || h.startsWith('172.')
+}
+
+function resolveUploadOrigin() {
+  const fromEnv = stripTrailingSlash(import.meta.env.VITE_UPLOAD_ORIGIN)
+  if (fromEnv) return fromEnv
+
+  if (!import.meta.env.DEV || typeof window === 'undefined') return ''
+
+  const host = window.location.hostname
+  if (!isLocalHost(host)) return ''
+
+  const protocol = window.location.protocol || 'http:'
+  return `${protocol}//${host}:18081`
+}
+
 function normalizeAssetUrl(url) {
   if (!url || typeof url !== 'string') return url
 
-  if (url.startsWith('/')) return url
+  const raw = url.trim()
+  const uploadOrigin = resolveUploadOrigin()
 
-  try {
-    const u = new URL(url)
-    const host = (u.hostname || '').toLowerCase()
-    if (
-      host === 'localhost' ||
-      host === '127.0.0.1' ||
-      host.startsWith('192.168.') ||
-      host.startsWith('10.') ||
-      host.startsWith('172.')
-    ) {
-      return `${u.pathname}${u.search}${u.hash}`
+  if (raw.startsWith('/')) {
+    if (uploadOrigin && raw.startsWith('/api/uploads/')) {
+      return `${uploadOrigin}${raw}`
     }
-  } catch {
-    return url
+    return raw
   }
 
-  return url
+  try {
+    const u = new URL(raw)
+    const host = (u.hostname || '').toLowerCase()
+    if (isLocalHost(host)) {
+      const localPath = `${u.pathname}${u.search}${u.hash}`
+      if (uploadOrigin && localPath.startsWith('/api/uploads/')) {
+        return `${uploadOrigin}${localPath}`
+      }
+      return localPath
+    }
+  } catch {
+    return raw
+  }
+
+  return raw
 }
 
 function normalizeItem(it) {

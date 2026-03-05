@@ -24,13 +24,16 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="page">
+  <div class="page admin-page">
     <div class="head">
       <div>
         <div class="title">用户管理</div>
-        <div class="sub">展示用户最近登录 IP（Cloudflare / 代理环境会读取 X-Forwarded-For）。</div>
+        <div class="sub">展示用户最近登录信息，用于风控与行为排查。</div>
       </div>
-      <button class="ghost" type="button" :disabled="loading" @click="load">刷新</button>
+      <div class="headRight">
+        <div class="tag">用户 {{ users.length }}</div>
+        <button class="ghost" type="button" :disabled="loading" @click="load">刷新</button>
+      </div>
     </div>
 
     <div v-if="errorMsg" class="error">{{ errorMsg }}</div>
@@ -71,6 +74,10 @@ onMounted(load)
 </template>
 
 <style scoped>
+.admin-page {
+  color: var(--admin-text);
+}
+
 .head {
   display: flex;
   justify-content: space-between;
@@ -79,46 +86,64 @@ onMounted(load)
   margin: 6px 0 14px;
 }
 
+.headRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .title {
   font-size: 20px;
   font-weight: 900;
-  color: #fff;
 }
 
 .sub {
   margin-top: 4px;
-  color: rgba(255, 255, 255, 0.66);
+  color: var(--admin-muted);
   font-size: 13px;
 }
 
+.tag {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e0e7ff, #dbeafe);
+  color: #1e3a8a;
+  border: 1px solid #c7d2fe;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .ghost {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  color: rgba(255, 255, 255, 0.9);
+  background: #ffffff;
+  border: 1px solid var(--admin-border);
+  color: var(--admin-text);
   padding: 8px 12px;
   border-radius: 12px;
-  cursor: pointer;
 }
 
 .error {
   margin: 10px 0 12px;
   padding: 10px 12px;
-  background: rgba(185, 28, 28, 0.08);
-  border: 1px solid rgba(185, 28, 28, 0.18);
-  border-radius: 14px;
-  color: #fecaca;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  border-radius: 12px;
+  color: #be123c;
   font-size: 13px;
 }
 
 .muted {
-  color: rgba(255, 255, 255, 0.66);
+  color: var(--admin-muted);
 }
 
 .tableWrap {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border-soft);
+  border-radius: 18px;
   overflow: hidden;
+  box-shadow: var(--admin-shadow);
 }
 
 .table {
@@ -129,24 +154,25 @@ onMounted(load)
 .table th,
 .table td {
   padding: 10px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid #e8eeff;
   text-align: left;
-  color: rgba(255, 255, 255, 0.86);
+  color: #334155;
   font-size: 13px;
 }
 
 .table th {
-  color: rgba(255, 255, 255, 0.66);
+  color: #475569;
   font-weight: 800;
-  background: rgba(255, 255, 255, 0.03);
+  background: linear-gradient(90deg, #eff6ff, #ecfeff);
 }
 
 .chip {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #eef2ff;
+  border: 1px solid #dbeafe;
   padding: 4px 8px;
   border-radius: 999px;
   font-size: 12px;
+  color: #334155;
 }
 
 .avatar {
@@ -154,8 +180,8 @@ onMounted(load)
   height: 28px;
   border-radius: 999px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--admin-border);
+  background: #f8fafc;
 }
 
 .avatar img {
@@ -168,7 +194,7 @@ onMounted(load)
 .avatarFallback {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(34, 197, 94, 0.18));
+  background: linear-gradient(135deg, #93c5fd, #86efac);
 }
 
 .mono {
@@ -177,6 +203,6 @@ onMounted(load)
 
 .empty {
   padding: 14px;
-  color: rgba(255, 255, 255, 0.66);
+  color: var(--admin-muted);
 }
 </style>
