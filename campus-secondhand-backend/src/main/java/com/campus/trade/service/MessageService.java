@@ -25,6 +25,9 @@ public class MessageService {
         if (item == null) {
             throw new IllegalArgumentException("Item not found");
         }
+        if (!ItemService.ITEM_STATUS_ON_SALE.equals(item.getStatus())) {
+            throw new IllegalArgumentException("Item not open for messages");
+        }
         ItemMessage message = new ItemMessage();
         message.setItemId(itemId);
         message.setFromUserId(fromUserId);
@@ -33,7 +36,15 @@ public class MessageService {
         return message;
     }
 
-    public List<ItemMessage> listMessages(long itemId) {
+    public List<ItemMessage> listMessages(Long userId, long itemId) {
+        Item item = itemMapper.findById(itemId);
+        if (item == null) {
+            throw new IllegalArgumentException("Item not found");
+        }
+        if (!ItemService.ITEM_STATUS_ON_SALE.equals(item.getStatus()) &&
+                (userId == null || item.getSellerId() == null || !item.getSellerId().equals(userId))) {
+            throw new IllegalArgumentException("No permission");
+        }
         return itemMessageMapper.listByItemId(itemId);
     }
 }

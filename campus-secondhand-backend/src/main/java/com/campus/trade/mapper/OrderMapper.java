@@ -24,6 +24,9 @@ public interface OrderMapper {
     @Update("UPDATE t_order SET status=#{status}, updated_at=NOW() WHERE id=#{id}")
     int updateStatus(@Param("id") Long id, @Param("status") String status);
 
+    @Update("UPDATE t_order SET status=#{toStatus}, updated_at=NOW() WHERE id=#{id} AND status=#{fromStatus}")
+    int updateStatusIfCurrent(@Param("id") Long id, @Param("fromStatus") String fromStatus, @Param("toStatus") String toStatus);
+
     @Delete("DELETE FROM t_order WHERE item_id = #{itemId}")
     int deleteByItemId(@Param("itemId") Long itemId);
 

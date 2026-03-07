@@ -37,6 +37,9 @@ public interface ItemMapper {
     @Update("UPDATE t_item SET status=#{status}, updated_at=NOW() WHERE id=#{id}")
     int updateStatus(@Param("id") Long id, @Param("status") String status);
 
+    @Update("UPDATE t_item SET status=#{toStatus}, updated_at=NOW() WHERE id=#{id} AND status=#{fromStatus}")
+    int updateStatusIfCurrent(@Param("id") Long id, @Param("fromStatus") String fromStatus, @Param("toStatus") String toStatus);
+
     @Select({
             "<script>",
             "SELECT * FROM t_item",

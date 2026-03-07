@@ -46,7 +46,6 @@ public class SecurityConfig {
                 })
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(eh -> eh
-                        // 关键：未登录访问受保护接口时，返回 401（而不是默认的 403），并保持统一的 JSON 响应格式
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(401);
                             response.setCharacterEncoding(StandardCharsets.UTF_8.name());
@@ -63,11 +62,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/share-gate/verify").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/share-gate/status").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/events/stream").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/uploads/**").permitAll()
                         .requestMatchers(HttpMethod.HEAD, "/api/uploads/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/items", "/api/items/*", "/api/items/*/messages").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/online/count").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/shares", "/api/shares/*", "/api/shares/*/comments").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
@@ -79,7 +80,25 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("*"));
+        configuration.setAllowedOriginPatterns(List.of(
+                "http://localhost",
+                "http://localhost:*",
+                "http://127.0.0.1",
+                "http://127.0.0.1:*",
+                "https://localhost",
+                "https://localhost:*",
+                "https://127.0.0.1",
+                "https://127.0.0.1:*",
+                "http://all.zjpnb.dpdns.org",
+                "http://all.zjpnb.dpdns.org:*",
+                "https://all.zjpnb.dpdns.org",
+                "https://all.zjpnb.dpdns.org:*",
+                "http://www.zjpnb.dpdns.org",
+                "http://www.zjpnb.dpdns.org:*",
+                "https://www.zjpnb.dpdns.org",
+                "https://www.zjpnb.dpdns.org:*"
+        ));
+        configuration.setAllowCredentials(true);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Authorization"));

@@ -17,20 +17,18 @@ import java.nio.charset.StandardCharsets;
 @Component
 public class ShareGateFilter extends OncePerRequestFilter {
 
-    private static final String HEADER = "X-Share-Gate-Token";
-
-    private final JwtService jwtService;
+    private final ShareGateSessionService shareGateSessionService;
     private final ObjectMapper objectMapper;
 
-    public ShareGateFilter(JwtService jwtService, ObjectMapper objectMapper) {
-        this.jwtService = jwtService;
+    public ShareGateFilter(ShareGateSessionService shareGateSessionService, ObjectMapper objectMapper) {
+        this.shareGateSessionService = shareGateSessionService;
         this.objectMapper = objectMapper;
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        String path = request.getServletPath();
+        String path = resolvePath(request);
         String method = request.getMethod();
 
         if (!path.startsWith("/api/shares")) {
@@ -43,13 +41,22 @@ public class ShareGateFilter extends OncePerRequestFilter {
             return;
         }
 
-        String token = request.getHeader(HEADER);
-        if (token == null || token.isBlank() || !jwtService.isValidShareGateToken(token)) {
+        if (!shareGateSessionService.hasValidSession(request)) {
+            shareGateSessionService.clearSession(request, response);
             writeForbidden(response);
             return;
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private String resolvePath(HttpServletRequest request) {
+        String requestUri = request.getRequestURI();
+        if (requestUri != null && !requestUri.isBlank()) {
+            return requestUri;
+        }
+        String servletPath = request.getServletPath();
+        return servletPath == null ? "" : servletPath;
     }
 
     private void writeForbidden(HttpServletResponse response) throws IOException {

@@ -2,7 +2,6 @@
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { verifyShareGate } from '../services/api'
-import { setShareGateToken } from '../services/auth'
 
 const router = useRouter()
 const route = useRoute()
@@ -28,13 +27,11 @@ async function submit() {
     }
 
     const resp = await verifyShareGate({ passphrase: val })
-    const token = resp?.data?.token
-    if (!token) {
+    if (!resp?.data?.verified) {
       errorMsg.value = '验证失败，请稍后重试'
       return
     }
 
-    setShareGateToken(token)
     await router.replace(redirectTo.value)
   } catch (e) {
     errorMsg.value = e?.response?.data?.message || e?.message || '口令验证失败'
@@ -47,11 +44,25 @@ async function submit() {
 <template>
   <div class="page verifyPage">
     <div class="hero">
+      <div class="heroBadge">SHARE GATE</div>
       <div class="title">好物分享口令验证</div>
-      <div class="sub muted">首次进入需要输入口令，验证通过后将自动记住登录状态。</div>
+      <div class="sub">首次进入需要输入口令，验证通过后将通过安全会话自动记住当前浏览器的访问状态。</div>
+      <div class="heroTips">
+        <span>仅首次验证</span>
+        <span>通过后自动跳转</span>
+        <span>不暴露门禁凭证</span>
+      </div>
     </div>
 
     <div class="card">
+      <div class="cardHead">
+        <div>
+          <div class="cardTitle">输入访问口令</div>
+          <div class="cardDesc">验证成功后将自动返回分享页面。</div>
+        </div>
+        <div class="cardHint">安全访问</div>
+      </div>
+
       <div class="field">
         <div class="label">访问口令</div>
         <input v-model="pass" class="input" placeholder="请输入口令" @keydown.enter="submit" />
@@ -68,84 +79,142 @@ async function submit() {
 
 <style scoped>
 .verifyPage {
-  max-width: 560px;
+  max-width: 720px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 18px;
 }
 
 .hero {
-  margin-top: 8px;
-  border-radius: 16px;
-  padding: 16px;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(59, 130, 246, 0.14));
-  border: 1px solid rgba(148, 163, 184, 0.24);
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.22), transparent 28%),
+    linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(59, 130, 246, 0.2));
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.06);
 }
 
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border-2);
-  border-radius: 14px;
-  padding: 16px;
-  box-shadow: var(--shadow-sm);
+.heroBadge {
+  display: inline-flex;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #0f172a;
 }
 
 .title {
-  font-size: 20px;
+  margin-top: 16px;
+  font-size: 30px;
+  line-height: 1.16;
   font-weight: 900;
-  margin-bottom: 6px;
+  color: #0f172a;
 }
 
 .sub {
+  margin-top: 10px;
+  max-width: 520px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: #475569;
+}
+
+.heroTips {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.heroTips span {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(148, 163, 184, 0.2);
   font-size: 12px;
+  color: #334155;
+}
+
+.card {
+  padding: 22px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.96));
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 22px;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+}
+
+.cardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.cardTitle {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.cardDesc {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.cardHint {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .field {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .label {
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
 }
 
 .input {
   width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: var(--surface);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  min-height: 48px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 14px;
+  padding: 0 14px;
+  background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .input:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
 }
 
 .primary {
   width: 100%;
+  min-height: 48px;
   background: linear-gradient(135deg, var(--primary), #6366f1);
   color: #fff;
   border: 0;
-  padding: 11px 14px;
-  border-radius: 10px;
+  padding: 12px 16px;
+  border-radius: 14px;
   cursor: pointer;
-  font-weight: 700;
-  transition: transform 0.15s ease, filter 0.15s ease;
-}
-
-.primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  filter: brightness(1.04);
-}
-
-.primary:disabled {
-  cursor: not-allowed;
-  opacity: 0.7;
 }
 
 .error {

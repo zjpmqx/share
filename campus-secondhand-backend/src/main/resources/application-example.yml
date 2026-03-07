@@ -41,19 +41,20 @@ app:
     secret: "CHANGE_ME_CHANGE_ME_CHANGE_ME_CHANGE_ME_CHANGE_ME_32_BYTES_MIN"
     expire-seconds: 604800
   share-gate:
-    passphrase: "CHANGE_ME_SHARE_GATE_PASSPHRASE"
-    token-expire-seconds: 86400
+    passphrase: "CHANGE_ME_WITH_A_STRONG_12_PLUS_CHAR_SHARE_GATE_SECRET"
+    token-expire-seconds: 1800
     verify-window-seconds: 60
-    verify-max-requests: 20
-    fail-max-attempts: 5
-    fail-ban-seconds: 900
+    verify-max-requests: 8
+    fail-max-attempts: 4
+    fail-ban-seconds: 1800
+    cookie-secure: true
   upload:
     dir: uploads
     max-bytes: 4294967296
     chunk-max-bytes: 67108864
   cleanup:
-    cron: "0 */10 * * * *"          # 每10分钟跑一次
-    chunk-ttl-seconds: 21600        # 分片上传目录超过6小时没动就删
-    temp-ttl-seconds: 21600         # *.uploading 超过6小时就删
-    orphan-min-age-seconds: 3600    # uploads 里孤儿文件至少存活1小时才允许删除
+    cron: "0 */10 * * * *"
+    chunk-ttl-seconds: 21600
+    temp-ttl-seconds: 21600
+    orphan-min-age-seconds: 3600
     max-delete-per-run: 200

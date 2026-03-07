@@ -1,5 +1,68 @@
 import { http } from './http'
 
+const env = import.meta?.env || {}
+
+export const CATEGORY_OPTIONS = [
+  { value: '', label: '全部分类' },
+  { value: 'BOOK', label: '书籍教材' },
+  { value: 'DIGITAL', label: '数码产品' },
+  { value: 'LIFE', label: '生活用品' },
+  { value: 'SPORT', label: '运动器材' },
+  { value: 'CLOTHING', label: '服装配饰' },
+  { value: 'OTHER', label: '其他' },
+]
+
+export const CONDITION_OPTIONS = [
+  { value: '', label: '全部成色' },
+  { value: 'NEW', label: '全新' },
+  { value: 'LIKE_NEW', label: '几乎全新' },
+  { value: 'GOOD', label: '良好' },
+  { value: 'FAIR', label: '一般' },
+]
+
+const CATEGORY_LABEL_MAP = {
+  BOOK: '书籍教材',
+  DIGITAL: '数码产品',
+  LIFE: '生活用品',
+  SPORT: '运动器材',
+  CLOTHING: '服装配饰',
+  FASHION: '服装配饰',
+  OTHER: '其他',
+}
+
+const CONDITION_LABEL_MAP = {
+  NEW: '全新',
+  LIKE_NEW: '几乎全新',
+  GOOD: '良好',
+  FAIR: '一般',
+}
+
+export function normalizeCategoryValue(value) {
+  const normalized = String(value || '').trim().toUpperCase()
+  if (!normalized) return ''
+  if (normalized === 'FASHION') return 'CLOTHING'
+  return normalized
+}
+
+export function normalizeConditionValue(value) {
+  const normalized = String(value || '').trim().toUpperCase()
+  if (!normalized) return ''
+  if (normalized === '9') return 'LIKE_NEW'
+  if (normalized === '8') return 'GOOD'
+  if (normalized === '7' || normalized === '6') return 'FAIR'
+  return normalized
+}
+
+export function formatCategoryLabel(value) {
+  const normalized = normalizeCategoryValue(value)
+  return CATEGORY_LABEL_MAP[normalized] || value || '未分类'
+}
+
+export function formatConditionLabel(value) {
+  const normalized = normalizeConditionValue(value)
+  return CONDITION_LABEL_MAP[normalized] || value || '未知'
+}
+
 function stripTrailingSlash(v) {
   return String(v || '').replace(/\/+$/, '')
 }
@@ -10,10 +73,10 @@ function isLocalHost(host) {
 }
 
 function resolveUploadOrigin() {
-  const fromEnv = stripTrailingSlash(import.meta.env.VITE_UPLOAD_ORIGIN)
+  const fromEnv = stripTrailingSlash(env.VITE_UPLOAD_ORIGIN)
   if (fromEnv) return fromEnv
 
-  if (!import.meta.env.DEV || typeof window === 'undefined') return ''
+  if (!env.DEV || typeof window === 'undefined') return ''
 
   const host = window.location.hostname
   if (!isLocalHost(host)) return ''
@@ -55,6 +118,8 @@ function normalizeAssetUrl(url) {
 function normalizeItem(it) {
   if (!it) return it
   if (it.coverImageUrl) it.coverImageUrl = normalizeAssetUrl(it.coverImageUrl)
+  it.category = normalizeCategoryValue(it.category)
+  it.conditionLevel = normalizeConditionValue(it.conditionLevel)
   return it
 }
 
@@ -81,6 +146,11 @@ export async function me() {
 
 export async function verifyShareGate(payload) {
   const { data } = await http.post('/auth/share-gate/verify', payload)
+  return data
+}
+
+export async function getShareGateStatus() {
+  const { data } = await http.get('/auth/share-gate/status')
   return data
 }
 
@@ -124,12 +194,22 @@ export async function getItem(id) {
 }
 
 export async function createItem(payload) {
-  const { data } = await http.post('/items', payload)
+  const nextPayload = {
+    ...payload,
+    category: normalizeCategoryValue(payload?.category),
+    conditionLevel: normalizeConditionValue(payload?.conditionLevel),
+  }
+  const { data } = await http.post('/items', nextPayload)
   return data
 }
 
 export async function updateItem(id, payload) {
-  const { data } = await http.put(`/items/${id}`, payload)
+  const nextPayload = {
+    ...payload,
+    category: normalizeCategoryValue(payload?.category),
+    conditionLevel: normalizeConditionValue(payload?.conditionLevel),
+  }
+  const { data } = await http.put(`/items/${id}`, nextPayload)
   return data
 }
 
@@ -195,6 +275,9 @@ export async function cancelOrder(id) {
 
 export async function adminPendingItems(params) {
   const { data } = await http.get('/admin/items/pending', { params })
+  if (Array.isArray(data?.data)) {
+    data.data = data.data.map(normalizeItem)
+  }
   return data
 }
 
@@ -205,6 +288,9 @@ export async function adminAuditItem(id, payload) {
 
 export async function adminListItems(params) {
   const { data } = await http.get('/admin/items', { params })
+  if (Array.isArray(data?.data)) {
+    data.data = data.data.map(normalizeItem)
+  }
   return data
 }
 
@@ -273,31 +359,30 @@ const CONCURRENT_CHUNKS = 4
 export async function uploadFile(file, options = {}) {
   const onProgress = typeof options?.onProgress === 'function' ? options.onProgress : null
   const timeoutMs = Number.isFinite(options?.timeoutMs) ? options.timeoutMs : 10 * 60 * 1000
-  
+
   if (!file) {
     throw new Error('file is required')
   }
 
   const fileSize = file.size
-  const fileName = file.name
-  
+
   if (onProgress) {
     onProgress(1)
   }
-  
+
   if (fileSize <= 4 * 1024 * 1024) {
     return uploadFileSimple(file, onProgress, timeoutMs)
   }
-  
+
   return uploadFileChunked(file, onProgress, timeoutMs)
 }
 
 async function uploadFileSimple(file, onProgress, timeoutMs) {
   const form = new FormData()
   form.append('file', file)
-  
+
   let lastProgress = 0
-  
+
   try {
     const { data } = await http.post('/files/upload', form, {
       timeout: timeoutMs,
@@ -318,11 +403,11 @@ async function uploadFileSimple(file, onProgress, timeoutMs) {
         }
       },
     })
-    
+
     if (onProgress) {
       onProgress(100)
     }
-    
+
     return data
   } catch (error) {
     console.error('uploadFile 失败:', error)
@@ -335,33 +420,33 @@ async function uploadFileChunked(file, onProgress, timeoutMs) {
   const fileName = file.name
   const chunkSize = CHUNK_SIZE
   const totalChunks = Math.ceil(fileSize / chunkSize)
-  
+
   let uploadId = null
-  
+
   try {
     if (onProgress) {
       onProgress(2)
     }
-    
+
     const initResp = await http.post('/files/upload/init', {
       filename: fileName,
       size: fileSize,
       chunkSize: chunkSize,
       contentType: file.type || 'application/octet-stream',
     })
-    
+
     if (initResp?.data?.code !== 0) {
       throw new Error(initResp?.data?.message || '初始化上传失败')
     }
-    
+
     uploadId = initResp.data.data?.uploadId
     if (!uploadId) {
       throw new Error('初始化上传失败：未获取 uploadId')
     }
-    
+
     const serverChunkSize = initResp.data.data?.chunkSize || chunkSize
     const serverTotalChunks = initResp.data.data?.totalChunks || totalChunks
-    
+
     const progressTracker = {
       chunks: new Array(serverTotalChunks).fill(0),
       uploadedBytes: 0,
@@ -369,37 +454,37 @@ async function uploadFileChunked(file, onProgress, timeoutMs) {
         const safeLoaded = Math.max(0, Number(loaded) || 0)
         const prevLoaded = this.chunks[chunkIndex] || 0
         this.chunks[chunkIndex] = safeLoaded
-        this.uploadedBytes += (safeLoaded - prevLoaded)
+        this.uploadedBytes += safeLoaded - prevLoaded
         const percentCompleted = Math.min(Math.round((this.uploadedBytes * 100) / fileSize), 99)
         if (onProgress) {
           onProgress(percentCompleted)
         }
       },
-      markCompleted(chunkIndex, chunkSize) {
-        const safeChunkSize = Math.max(0, Number(chunkSize) || 0)
+      markCompleted(chunkIndex, chunkLength) {
+        const safeChunkSize = Math.max(0, Number(chunkLength) || 0)
         const prevLoaded = this.chunks[chunkIndex] || 0
         this.chunks[chunkIndex] = safeChunkSize
-        this.uploadedBytes += (safeChunkSize - prevLoaded)
+        this.uploadedBytes += safeChunkSize - prevLoaded
         const percentCompleted = Math.min(Math.round((this.uploadedBytes * 100) / fileSize), 99)
         if (onProgress) {
           onProgress(percentCompleted)
         }
       }
     }
-    
+
     async function uploadSingleChunk(index) {
       const start = index * serverChunkSize
       const end = Math.min(start + serverChunkSize, fileSize)
       const chunk = file.slice(start, end)
       const chunkLen = end - start
-      
+
       for (let retry = 0; retry < CHUNK_MAX_RETRIES; retry++) {
         try {
           const chunkForm = new FormData()
           chunkForm.append('uploadId', uploadId)
           chunkForm.append('index', String(index))
           chunkForm.append('file', chunk, fileName + '.part' + index)
-          
+
           await http.post('/files/upload/chunk', chunkForm, {
             timeout: CHUNK_UPLOAD_TIMEOUT,
             headers: {
@@ -409,7 +494,7 @@ async function uploadFileChunked(file, onProgress, timeoutMs) {
               progressTracker.updateProgress(index, progressEvent.loaded || 0)
             },
           })
-          
+
           progressTracker.markCompleted(index, chunkLen)
           return { index, success: true }
         } catch (e) {
@@ -419,30 +504,30 @@ async function uploadFileChunked(file, onProgress, timeoutMs) {
           await sleep(1000 * (retry + 1))
         }
       }
-      
+
       return { index, success: false, error: new Error('上传失败') }
     }
-    
+
     const results = []
     for (let i = 0; i < serverTotalChunks; i += CONCURRENT_CHUNKS) {
       const batch = []
       for (let j = i; j < Math.min(i + CONCURRENT_CHUNKS, serverTotalChunks); j++) {
         batch.push(uploadSingleChunk(j))
       }
-      
+
       const batchResults = await Promise.all(batch)
       results.push(...batchResults)
-      
+
       const failedChunk = batchResults.find(r => !r.success)
       if (failedChunk) {
         throw failedChunk.error || new Error(`分片 ${failedChunk.index} 上传失败`)
       }
     }
-    
+
     if (onProgress) {
       onProgress(98)
     }
-    
+
     let completeResp = null
     try {
       completeResp = await http.post('/files/upload/complete', null, {
@@ -455,26 +540,28 @@ async function uploadFileChunked(file, onProgress, timeoutMs) {
       }
       throw e
     }
-    
-    if (completeResp?.status === 202 || 
-        completeResp?.data?.data === 'PROCESSING' ||
-        (completeResp?.data?.code === 0 && !completeResp?.data?.data)) {
+
+    if (
+      completeResp?.status === 202 ||
+      completeResp?.data?.data === 'PROCESSING' ||
+      (completeResp?.data?.code === 0 && !completeResp?.data?.data)
+    ) {
       return await pollUploadResult(uploadId, onProgress)
     }
-    
+
     if (completeResp?.data?.code !== 0) {
       throw new Error(completeResp?.data?.message || '合并文件失败')
     }
-    
+
     const url = completeResp.data.data
     if (!url || typeof url !== 'string') {
       throw new Error('上传失败：未返回有效地址')
     }
-    
+
     if (onProgress) {
       onProgress(100)
     }
-    
+
     return completeResp.data
   } catch (error) {
     console.error('分片上传失败:', error)
@@ -486,14 +573,14 @@ async function pollUploadResult(uploadId, onProgress, maxAttempts = 120, interva
   if (onProgress) {
     onProgress(99)
   }
-  
+
   for (let i = 0; i < maxAttempts; i++) {
     try {
       const resp = await http.get('/files/upload/result', {
         params: { uploadId },
         timeout: 30 * 1000,
       })
-      
+
       if (resp?.status === 200 && resp?.data?.code === 0) {
         const url = resp.data.data
         if (url && typeof url === 'string' && url.startsWith('/')) {
@@ -503,7 +590,7 @@ async function pollUploadResult(uploadId, onProgress, maxAttempts = 120, interva
           return resp.data
         }
       }
-      
+
       if (resp?.status === 202) {
         if (onProgress && i % 10 === 0) {
           onProgress(99)
@@ -512,10 +599,10 @@ async function pollUploadResult(uploadId, onProgress, maxAttempts = 120, interva
     } catch (e) {
       console.warn('轮询上传结果:', e?.message || e)
     }
-    
+
     await sleep(intervalMs)
   }
-  
+
   throw new Error('上传超时：文件合并时间过长，请稍后刷新页面查看')
 }
 

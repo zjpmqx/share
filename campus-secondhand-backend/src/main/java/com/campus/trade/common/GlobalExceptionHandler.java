@@ -7,11 +7,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.BindException;
-import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -45,7 +45,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConstraintViolationException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<String> handleConstraintViolation(ConstraintViolationException e) {
-        return ApiResponse.error(400, e.getMessage());
+        return ApiResponse.error(400, "Validation failed");
     }
 
     @ExceptionHandler(AuthenticationException.class)
@@ -70,11 +70,6 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<Void> handleOther(Exception e) {
         log.error("Unhandled exception", e);
-        String msg = e.getMessage();
-        if (msg == null || msg.isBlank()) {
-            msg = "Internal server error";
-        }
-        String type = e.getClass().getSimpleName();
-        return ApiResponse.error(500, type + ": " + msg);
+        return ApiResponse.error(500, "Internal server error");
     }
 }

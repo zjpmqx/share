@@ -1,9 +1,50 @@
 import axios from 'axios'
-import { getToken, clearToken, getShareGateToken, clearShareGateToken } from './auth'
+import { getToken, clearToken } from './auth'
+
+const env = import.meta?.env || {}
+
+export function normalizeErrorResponseData(data) {
+  if (typeof data === 'string' && data.trim()) {
+    return { message: data }
+  }
+  return data
+}
+
+export function shouldRedirectToLoginPath(pathname = '') {
+  const currentPath = String(pathname || '')
+  return currentPath.startsWith('/admin') || currentPath.startsWith('/publish') || currentPath.startsWith('/my-items') || currentPath.startsWith('/orders') || currentPath.startsWith('/profile') || currentPath.startsWith('/shares/publish')
+}
+
+export function buildLoginRedirectTarget(locationLike) {
+  const pathname = String(locationLike?.pathname || '')
+  const search = String(locationLike?.search || '')
+  const hash = String(locationLike?.hash || '')
+  const currentPath = `${pathname}${search}${hash}`
+  if (!shouldRedirectToLoginPath(pathname) || pathname.startsWith('/login')) {
+    return ''
+  }
+  return `/login?redirect=${encodeURIComponent(currentPath)}`
+}
+
+export function shouldHandleShareGate403(path = '', message = '') {
+  return String(path || '').startsWith('/shares') && String(message || '').includes('Share gate verify required')
+}
+
+export function buildShareVerifyRedirectTarget(locationLike) {
+  const pathname = String(locationLike?.pathname || '')
+  if (pathname.startsWith('/shares/verify')) {
+    return ''
+  }
+  const search = String(locationLike?.search || '')
+  const hash = String(locationLike?.hash || '')
+  const redirect = `${pathname}${search}${hash}`
+  return `/shares/verify?redirect=${encodeURIComponent(redirect)}`
+}
 
 export const http = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE || '/api',
+  baseURL: env.VITE_API_BASE || '/api',
   timeout: 0,
+  withCredentials: true,
   transformResponse: [
     (data) => {
       if (typeof data !== 'string') return data
@@ -16,7 +57,6 @@ export const http = axios.create({
       }
     },
   ],
-  // 确保上传进度能正确工作
   maxRedirects: 5,
 })
 
@@ -26,20 +66,6 @@ http.interceptors.request.use((config) => {
     config.headers = config.headers || {}
     config.headers.Authorization = `Bearer ${token}`
   }
-
-  try {
-    const path = String(config?.url || '')
-    const isSharesApi = path.startsWith('/shares')
-    if (isSharesApi) {
-      const shareGateToken = getShareGateToken()
-      if (shareGateToken) {
-        config.headers = config.headers || {}
-        config.headers['X-Share-Gate-Token'] = shareGateToken
-      }
-    }
-  } catch {
-  }
-
   return config
 })
 
@@ -47,10 +73,7 @@ http.interceptors.response.use(
   (resp) => resp,
   (error) => {
     try {
-      const d = error?.response?.data
-      if (typeof d === 'string' && d.trim()) {
-        error.response.data = { message: d }
-      }
+      error.response.data = normalizeErrorResponseData(error?.response?.data)
     } catch {
     }
 
@@ -58,19 +81,10 @@ http.interceptors.response.use(
       clearToken()
 
       try {
-        const path = String(error?.config?.url || '')
-        if (path.startsWith('/shares')) {
-          clearShareGateToken()
-        }
-      } catch {
-      }
-
-      try {
-        const isBrowser = typeof window !== 'undefined'
-        if (isBrowser) {
-          const path = window.location.pathname + window.location.search + window.location.hash
-          if (!window.location.pathname.startsWith('/login')) {
-            window.location.href = `/login?redirect=${encodeURIComponent(path)}`
+        if (typeof window !== 'undefined') {
+          const redirectTarget = buildLoginRedirectTarget(window.location)
+          if (redirectTarget) {
+            window.location.href = redirectTarget
           }
         }
       } catch {
@@ -81,11 +95,12 @@ http.interceptors.response.use(
       try {
         const path = String(error?.config?.url || '')
         const msg = String(error?.response?.data?.message || '')
-        if (path.startsWith('/shares') && msg.includes('Share gate verify required')) {
-          clearShareGateToken()
-          if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/shares/verify')) {
-            const redirect = window.location.pathname + window.location.search + window.location.hash
-            window.location.href = `/shares/verify?redirect=${encodeURIComponent(redirect)}`
+        if (shouldHandleShareGate403(path, msg)) {
+          if (typeof window !== 'undefined') {
+            const redirectTarget = buildShareVerifyRedirectTarget(window.location)
+            if (redirectTarget) {
+              window.location.href = redirectTarget
+            }
           }
         }
       } catch {

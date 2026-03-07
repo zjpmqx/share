@@ -29,7 +29,6 @@ public class ItemController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        // B flow: public list only shows ON_SALE items
         String safeStatus = ItemService.ITEM_STATUS_ON_SALE;
         return ApiResponse.ok(itemService.list(safeStatus, category, keyword, page, size));
     }
@@ -51,7 +50,9 @@ public class ItemController {
 
     @GetMapping("/{id:\\d+}")
     public ApiResponse<Item> detail(@PathVariable long id) {
-        return ApiResponse.ok(itemService.getById(id));
+        var principal = SecurityUtils.currentUser();
+        Long userId = principal == null ? null : principal.getUserId();
+        return ApiResponse.ok(itemService.getById(userId, id));
     }
 
     @PostMapping

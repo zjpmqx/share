@@ -9,6 +9,7 @@ import com.campus.trade.mapper.SharePostMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class ShareService {
@@ -18,6 +19,14 @@ public class ShareService {
     public static final String MEDIA_TYPE_VIDEO = "VIDEO";
     public static final String MEDIA_TYPE_URL = "URL";
     public static final String MEDIA_TYPE_FILE = "FILE";
+
+    private static final Set<String> ALLOWED_MEDIA_TYPES = Set.of(
+            MEDIA_TYPE_NONE,
+            MEDIA_TYPE_IMAGE,
+            MEDIA_TYPE_VIDEO,
+            MEDIA_TYPE_URL,
+            MEDIA_TYPE_FILE
+    );
 
     private final SharePostMapper sharePostMapper;
     private final ShareCommentMapper shareCommentMapper;
@@ -36,6 +45,11 @@ public class ShareService {
         String mediaType = request.getMediaType();
         if (mediaType == null || mediaType.isBlank()) {
             mediaType = MEDIA_TYPE_NONE;
+        } else {
+            mediaType = mediaType.trim().toUpperCase();
+        }
+        if (!ALLOWED_MEDIA_TYPES.contains(mediaType)) {
+            throw new IllegalArgumentException("Invalid mediaType");
         }
         post.setMediaType(mediaType);
         post.setMediaUrl(request.getMediaUrl());

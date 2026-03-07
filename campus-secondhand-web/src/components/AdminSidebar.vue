@@ -46,7 +46,7 @@ const route = useRoute()
   text-decoration: none;
   border: 1px solid #e2e8f0;
   background: #ffffff;
-  transition: all 0.2s ease;
+  transition: transform var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .dot {
@@ -59,7 +59,8 @@ const route = useRoute()
 .link:hover {
   background: #f0f7ff;
   border-color: #bfdbfe;
-  transform: translateX(2px);
+  transform: translateX(4px);
+  box-shadow: 0 14px 28px rgba(148, 163, 184, 0.14);
 }
 
 .link.active {

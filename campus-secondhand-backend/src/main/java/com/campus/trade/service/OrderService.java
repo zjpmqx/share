@@ -4,6 +4,7 @@ import com.campus.trade.entity.Item;
 import com.campus.trade.entity.Order;
 import com.campus.trade.mapper.ItemMapper;
 import com.campus.trade.mapper.OrderMapper;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,7 +40,10 @@ public class OrderService {
             throw new IllegalArgumentException("Cannot buy your own item");
         }
 
-        itemMapper.updateStatus(itemId, ItemService.ITEM_STATUS_LOCKED);
+        int updated = itemMapper.updateStatusIfCurrent(itemId, ItemService.ITEM_STATUS_ON_SALE, ItemService.ITEM_STATUS_LOCKED);
+        if (updated == 0) {
+            throw new IllegalArgumentException("Item not for sale");
+        }
 
         Order order = new Order();
         order.setItemId(itemId);
@@ -47,7 +51,12 @@ public class OrderService {
         order.setSellerId(item.getSellerId());
         order.setAmount(item.getPrice());
         order.setStatus(ORDER_STATUS_PENDING_PAYMENT);
-        orderMapper.insert(order);
+        try {
+            orderMapper.insert(order);
+        } catch (DuplicateKeyException e) {
+            itemMapper.updateStatusIfCurrent(itemId, ItemService.ITEM_STATUS_LOCKED, ItemService.ITEM_STATUS_ON_SALE);
+            throw new IllegalArgumentException("Item already ordered");
+        }
         return orderMapper.findById(order.getId());
     }
 
@@ -71,7 +80,11 @@ public class OrderService {
         if (!ORDER_STATUS_PENDING_PAYMENT.equals(order.getStatus())) {
             throw new IllegalArgumentException("Order is not pending payment");
         }
-        orderMapper.updateStatus(orderId, ORDER_STATUS_PENDING_SHIPMENT);
+
+        int updated = orderMapper.updateStatusIfCurrent(orderId, ORDER_STATUS_PENDING_PAYMENT, ORDER_STATUS_PENDING_SHIPMENT);
+        if (updated == 0) {
+            throw new IllegalArgumentException("Order is not pending payment");
+        }
         return orderMapper.findById(orderId);
     }
 
@@ -87,7 +100,11 @@ public class OrderService {
         if (!ORDER_STATUS_PENDING_SHIPMENT.equals(order.getStatus())) {
             throw new IllegalArgumentException("Order is not pending shipment");
         }
-        orderMapper.updateStatus(orderId, ORDER_STATUS_PENDING_RECEIPT);
+
+        int updated = orderMapper.updateStatusIfCurrent(orderId, ORDER_STATUS_PENDING_SHIPMENT, ORDER_STATUS_PENDING_RECEIPT);
+        if (updated == 0) {
+            throw new IllegalArgumentException("Order is not pending shipment");
+        }
         return orderMapper.findById(orderId);
     }
 
@@ -103,8 +120,14 @@ public class OrderService {
         if (!ORDER_STATUS_PENDING_RECEIPT.equals(order.getStatus())) {
             throw new IllegalArgumentException("Order is not pending receipt");
         }
-        orderMapper.updateStatus(orderId, ORDER_STATUS_COMPLETED);
-        itemMapper.updateStatus(order.getItemId(), ItemService.ITEM_STATUS_SOLD);
+
+        int updated = orderMapper.updateStatusIfCurrent(orderId, ORDER_STATUS_PENDING_RECEIPT, ORDER_STATUS_COMPLETED);
+        if (updated == 0) {
+            throw new IllegalArgumentException("Order is not pending receipt");
+        }
+        if (order.getItemId() != null) {
+            itemMapper.updateStatusIfCurrent(order.getItemId(), ItemService.ITEM_STATUS_LOCKED, ItemService.ITEM_STATUS_SOLD);
+        }
         return orderMapper.findById(orderId);
     }
 
@@ -118,10 +141,16 @@ public class OrderService {
             throw new IllegalArgumentException("No permission");
         }
         if (!ORDER_STATUS_PENDING_PAYMENT.equals(order.getStatus())) {
-            throw new IllegalArgumentException("Only pending payment orders can be canceled");
+            throw new IllegalArgumentException("Order is not pending payment");
         }
-        orderMapper.updateStatus(orderId, ORDER_STATUS_CANCELED);
-        itemMapper.updateStatus(order.getItemId(), ItemService.ITEM_STATUS_ON_SALE);
+
+        int updated = orderMapper.updateStatusIfCurrent(orderId, ORDER_STATUS_PENDING_PAYMENT, ORDER_STATUS_CANCELED);
+        if (updated == 0) {
+            throw new IllegalArgumentException("Order is not pending payment");
+        }
+        if (order.getItemId() != null) {
+            itemMapper.updateStatusIfCurrent(order.getItemId(), ItemService.ITEM_STATUS_LOCKED, ItemService.ITEM_STATUS_ON_SALE);
+        }
         return orderMapper.findById(orderId);
     }
 }

@@ -17,9 +17,9 @@ const pageTitle = computed(() => {
 </script>
 
 <template>
-  <div class="admin-shell wrap">
-    <aside class="side">
-      <div class="brand">
+  <div class="admin-shell">
+    <aside class="side surface">
+      <div class="brand surface">
         <div class="brandBadge">Campus Market</div>
         <div class="brandTitle">二手交易后台</div>
         <div class="brandSub">清爽白色系 · 高效治理 · 体验统一</div>
@@ -28,87 +28,75 @@ const pageTitle = computed(() => {
     </aside>
 
     <div class="content">
-      <header class="top">
+      <header class="top surface">
         <div>
           <div class="title">{{ pageTitle }}</div>
           <div class="sub">让管理像逛主站一样轻盈、清晰、好用</div>
         </div>
-        <div class="spark"></div>
+        <div class="spark floaty"></div>
       </header>
       <main class="main">
-        <RouterView />
+        <RouterView v-slot="{ Component, route }">
+          <Transition name="admin-content-fade" mode="out-in">
+            <component :is="Component" :key="route.fullPath" />
+          </Transition>
+        </RouterView>
       </main>
     </div>
   </div>
 </template>
 
 <style scoped>
-.wrap {
-  --admin-bg: #f6f8ff;
-  --admin-surface: #ffffff;
-  --admin-surface-2: #f8faff;
-  --admin-surface-strong: #f1f5ff;
-  --admin-border: #dbe4ff;
-  --admin-border-soft: #e8eeff;
-  --admin-text: #0f172a;
-  --admin-muted: #64748b;
-  --admin-chip: #eef2ff;
-  --admin-primary: #3b82f6;
-  --admin-primary-2: #14b8a6;
-  --admin-danger: #f43f5e;
-  --admin-shadow: 0 12px 30px rgba(37, 99, 235, 0.09);
-
+.admin-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 270px 1fr;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
+  padding: 18px;
   background:
-    radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.12), transparent 32%),
-    radial-gradient(circle at 100% 0%, rgba(45, 212, 191, 0.12), transparent 34%),
-    linear-gradient(180deg, #f9fbff, var(--admin-bg));
-  color: var(--admin-text);
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 24%),
+    radial-gradient(circle at top right, rgba(16, 185, 129, 0.1), transparent 20%),
+    linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  color: var(--text);
 }
 
 .side {
-  padding: 16px 14px;
   position: sticky;
-  top: 0;
-  height: 100vh;
-  border-right: 1px solid var(--admin-border-soft);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(246, 250, 255, 0.95));
+  top: 18px;
+  height: calc(100vh - 36px);
+  padding: 14px;
 }
 
 .brand {
   margin-bottom: 12px;
-  padding: 12px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 1), rgba(239, 246, 255, 1));
-  border: 1px solid var(--admin-border);
-  box-shadow: var(--admin-shadow);
+  padding: 16px;
+  border-color: rgba(59, 130, 246, 0.14);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(239, 246, 255, 0.94));
 }
 
 .brandBadge {
   display: inline-flex;
   align-items: center;
-  height: 24px;
-  padding: 0 10px;
+  min-height: 28px;
+  padding: 0 12px;
   border-radius: 999px;
   font-size: 12px;
-  font-weight: 700;
-  color: #1d4ed8;
-  background: rgba(191, 219, 254, 0.8);
+  font-weight: 800;
+  color: var(--primary);
+  background: var(--primary-soft);
 }
 
 .brandTitle {
-  margin-top: 8px;
-  font-size: 18px;
+  margin-top: 10px;
+  font-size: 20px;
   font-weight: 900;
-  letter-spacing: 0.2px;
+  letter-spacing: -0.02em;
 }
 
 .brandSub {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--admin-muted);
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .content {
@@ -117,52 +105,93 @@ const pageTitle = computed(() => {
 
 .top {
   position: sticky;
-  top: 0;
+  top: 18px;
   z-index: 5;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--admin-border-soft);
-  background: rgba(255, 255, 255, 0.86);
-  backdrop-filter: blur(10px);
+  gap: 16px;
+  padding: 18px 20px;
+  transition: box-shadow var(--transition-slow), transform var(--transition-slow);
+}
+
+.top:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 34px rgba(148, 163, 184, 0.16);
 }
 
 .title {
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 900;
-  color: var(--admin-text);
+  letter-spacing: -0.02em;
 }
 
 .sub {
-  margin-top: 2px;
+  margin-top: 6px;
   font-size: 13px;
-  color: var(--admin-muted);
+  color: var(--muted);
 }
 
 .spark {
-  width: 96px;
-  height: 12px;
+  width: 108px;
+  height: 14px;
   border-radius: 999px;
   background: linear-gradient(90deg, #60a5fa, #34d399, #f59e0b, #f472b6);
-  opacity: 0.9;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
 }
 
 .main {
-  padding: 18px 16px 38px;
-  max-width: 1240px;
-  margin: 0 auto;
+  max-width: var(--content-width);
+  margin: 18px auto 0;
 }
 
-@media (max-width: 980px) {
-  .wrap {
+.admin-content-fade-enter-active,
+.admin-content-fade-leave-active {
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.admin-content-fade-enter-from,
+.admin-content-fade-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.admin-content-fade-enter-to,
+.admin-content-fade-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (max-width: 1080px) {
+  .admin-shell {
     grid-template-columns: 1fr;
   }
 
   .side {
     position: relative;
+    top: 0;
     height: auto;
+  }
+
+  .top {
+    top: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-shell {
+    gap: 14px;
+    padding: 12px;
+  }
+
+  .top {
+    padding: 16px;
+  }
+
+  .spark {
+    width: 72px;
   }
 }
 </style>

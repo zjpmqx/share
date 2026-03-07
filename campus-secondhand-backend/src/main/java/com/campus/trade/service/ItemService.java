@@ -5,6 +5,7 @@ import com.campus.trade.dto.item.UpdateItemRequest;
 import com.campus.trade.entity.Item;
 import com.campus.trade.mapper.ItemImageMapper;
 import com.campus.trade.mapper.ItemMapper;
+import com.campus.trade.mapper.ItemMessageMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,11 +23,18 @@ public class ItemService {
 
     private final ItemMapper itemMapper;
     private final ItemImageMapper itemImageMapper;
+    private final ItemMessageMapper itemMessageMapper;
     private final UploadStorageService uploadStorageService;
 
-    public ItemService(ItemMapper itemMapper, ItemImageMapper itemImageMapper, UploadStorageService uploadStorageService) {
+    public ItemService(
+            ItemMapper itemMapper,
+            ItemImageMapper itemImageMapper,
+            ItemMessageMapper itemMessageMapper,
+            UploadStorageService uploadStorageService
+    ) {
         this.itemMapper = itemMapper;
         this.itemImageMapper = itemImageMapper;
+        this.itemMessageMapper = itemMessageMapper;
         this.uploadStorageService = uploadStorageService;
     }
 
@@ -64,6 +72,10 @@ public class ItemService {
         item.setPrice(request.getPrice());
         item.setConditionLevel(request.getConditionLevel());
         item.setCoverImageUrl(request.getCoverImageUrl());
+        if (ITEM_STATUS_REJECTED.equals(item.getStatus())) {
+            item.setStatus(ITEM_STATUS_PENDING_REVIEW);
+            item.setAuditReason(null);
+        }
         itemMapper.update(item);
         return itemMapper.findById(itemId);
     }
@@ -84,6 +96,7 @@ public class ItemService {
             throw new IllegalArgumentException("Item cannot be deleted in current status");
         }
         List<String> imageUrls = itemImageMapper.listUrlsByItemId(itemId);
+        itemMessageMapper.deleteByItemId(itemId);
         itemImageMapper.deleteByItemId(itemId);
         itemMapper.deleteById(itemId);
 
@@ -123,12 +136,18 @@ public class ItemService {
         return itemMapper.findById(itemId);
     }
 
-    public Item getById(long id) {
+    public Item getById(Long userId, long id) {
         Item item = itemMapper.findById(id);
         if (item == null) {
             throw new IllegalArgumentException("Item not found");
         }
-        return item;
+        if (ITEM_STATUS_ON_SALE.equals(item.getStatus())) {
+            return item;
+        }
+        if (userId != null && item.getSellerId() != null && item.getSellerId().equals(userId)) {
+            return item;
+        }
+        throw new IllegalArgumentException("No permission");
     }
 
     public List<Item> list(String status, String category, String keyword, int page, int size) {

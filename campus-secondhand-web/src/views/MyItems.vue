@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import { deleteItem, listMyItems, offShelfItem, onShelfItem } from '../services/api'
+import { deleteItem, formatCategoryLabel, formatConditionLabel, listMyItems, offShelfItem, onShelfItem } from '../services/api'
 
 const loading = ref(false)
 const items = ref([])
@@ -80,18 +80,32 @@ async function doDelete(it) {
 </script>
 
 <template>
-  <div class="page">
-    <div class="head">
+  <div class="page myItemsPage">
+    <section class="hero surfacePanel">
       <div>
+        <div class="heroTag">MY ITEMS</div>
         <div class="title">我的发布</div>
-        <div class="sub">发布后会进入审核，通过后才会出现在首页。</div>
+        <div class="sub">发布后会直接上架，你可以在这里查看、下架、重新上架或删除自己的商品。</div>
       </div>
-    </div>
+      <div class="heroBadges">
+        <span>支持关键词筛选</span>
+        <span>状态一目了然</span>
+        <span>管理更顺手</span>
+      </div>
+    </section>
 
     <div class="search card">
+      <div class="filterHead">
+        <div>
+          <div class="filterTitle">筛选我的商品</div>
+          <div class="filterSub">按关键词、分类和状态快速定位待处理商品。</div>
+        </div>
+        <div class="resultBadge">共 {{ items.length }} 条</div>
+      </div>
+
       <div class="row">
-        <input v-model="keyword" class="input" placeholder="关键词" />
-        <input v-model="category" class="input" placeholder="分类：BOOK / DIGITAL / LIFE" />
+        <input v-model="keyword" class="input" placeholder="搜索标题关键词" />
+        <input v-model="category" class="input" placeholder="分类：BOOK / DIGITAL / LIFE / SPORT / CLOTHING" />
         <select v-model="status" class="select">
           <option value="">全部状态</option>
           <option value="PENDING_REVIEW">待审核</option>
@@ -103,25 +117,27 @@ async function doDelete(it) {
         </select>
         <button class="primary" type="button" @click="load">查询</button>
       </div>
+
       <div v-if="errorMsg" class="error">{{ errorMsg }}</div>
       <div v-if="actionError" class="error">{{ actionError }}</div>
     </div>
 
-    <div v-if="loading" class="muted">加载中...</div>
+    <div v-if="loading" class="stateCard">加载中...</div>
 
     <div v-else class="grid">
       <div v-for="it in items" :key="it.id" class="item card card-hover">
         <div class="img">
           <img v-if="it.coverImageUrl" :src="it.coverImageUrl" alt="" loading="lazy" />
+          <div v-else class="imgFallback">暂无封面</div>
+          <div class="floatingPrice">￥{{ it.price }}</div>
         </div>
         <div class="body">
           <div class="name">{{ it.title }}</div>
           <div class="chips">
-            <span class="chip">{{ it.category }}</span>
-            <span class="chip">{{ it.status }}</span>
-            <span class="chip">成色 {{ it.conditionLevel }}</span>
+            <span class="chip">{{ formatCategoryLabel(it.category) }}</span>
+            <span class="chip chipStatus">{{ it.status }}</span>
+            <span class="chip">成色 {{ formatConditionLabel(it.conditionLevel) }}</span>
           </div>
-          <div class="price">￥{{ it.price }}</div>
           <div v-if="it.status === 'REJECTED' && it.auditReason" class="reason">驳回原因：{{ it.auditReason }}</div>
 
           <div class="actions">
@@ -145,7 +161,7 @@ async function doDelete(it) {
             </button>
 
             <button
-              v-if="it.status === 'OFF_SHELF' || it.status === 'PENDING_REVIEW' || it.status === 'REJECTED'"
+              v-if="it.status === 'OFF_SHELF' || it.status === 'PENDING_REVIEW' || it.status === 'REJECTED' || it.status === 'ON_SALE'"
               class="danger"
               type="button"
               :disabled="actionLoadingId === it.id"
@@ -166,28 +182,106 @@ async function doDelete(it) {
 </template>
 
 <style scoped>
-.head {
+.myItemsPage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.surfacePanel {
+  position: relative;
+  overflow: hidden;
+}
+
+.hero {
+  padding: 22px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.22), transparent 30%),
+    linear-gradient(135deg, rgba(59, 130, 246, 0.16), rgba(16, 185, 129, 0.16));
+  border: 1px solid rgba(148, 163, 184, 0.22);
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
-  gap: 12px;
-  margin: 6px 0 14px;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.heroTag {
+  display: inline-flex;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
 }
 
 .title {
-  font-size: 22px;
+  margin-top: 14px;
+  font-size: 28px;
   font-weight: 900;
+  color: #0f172a;
 }
 
 .sub {
-  margin-top: 4px;
+  margin-top: 8px;
+  max-width: 620px;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.heroBadges {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.heroBadges span {
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #334155;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.search {
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
+}
+
+.filterHead {
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.filterTitle {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.filterSub {
+  margin-top: 6px;
   color: var(--muted);
   font-size: 13px;
 }
 
-.search {
-  padding: 12px;
-  margin-bottom: 14px;
+.resultBadge {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .row {
@@ -197,64 +291,68 @@ async function doDelete(it) {
   align-items: center;
 }
 
-@media (max-width: 900px) {
-  .row {
-    grid-template-columns: 1fr;
-  }
+.input,
+.select {
+  min-height: 42px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 14px;
+  padding: 0 14px;
+  background: #fff;
+}
+
+.input:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
 .primary {
-  background: var(--primary);
+  min-height: 42px;
+  padding: 0 18px;
+  background: linear-gradient(135deg, var(--primary), #6366f1);
   color: #fff;
   border: 0;
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
+  border-radius: 14px;
   cursor: pointer;
-}
-
-.primary:hover {
-  background: var(--primary-hover);
+  font-weight: 700;
 }
 
 .error {
   margin-top: 10px;
-  padding: 10px 12px;
-  background: rgba(185, 28, 28, 0.08);
-  border: 1px solid rgba(185, 28, 28, 0.18);
-  border-radius: var(--radius);
+  padding: 12px 14px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  border-radius: 14px;
   color: var(--danger);
   font-size: 13px;
+}
+
+.stateCard {
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--muted);
 }
 
 .grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-}
-
-@media (max-width: 1100px) {
-  .grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 520px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
+  gap: 16px;
 }
 
 .item {
   overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.06);
 }
 
 .img {
-  height: 160px;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border-2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
+  height: 220px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(16, 185, 129, 0.08));
 }
 
 .img img {
@@ -264,83 +362,147 @@ async function doDelete(it) {
   display: block;
 }
 
+.imgFallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.floatingPrice {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.78);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+}
+
 .body {
-  padding: 12px;
+  padding: 16px;
 }
 
 .name {
-  font-weight: 900;
-  line-height: 1.35;
-  margin-bottom: 10px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
 }
 
 .chips {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
 }
 
-.price {
-  font-size: 18px;
-  font-weight: 900;
-  color: #ef4444;
+.chip {
+  background: rgba(241, 245, 249, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.chipStatus {
+  color: var(--primary);
+  background: rgba(59, 130, 246, 0.08);
 }
 
 .reason {
-  margin-top: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--danger);
   font-size: 13px;
-  color: var(--muted);
+  line-height: 1.6;
 }
 
 .actions {
-  margin-top: 10px;
   display: flex;
   gap: 10px;
-  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.ghost,
+.danger {
+  min-height: 40px;
+  border-radius: 12px;
+  padding: 0 14px;
+  cursor: pointer;
+  font-weight: 700;
 }
 
 .ghost {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.ghost:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: #fff;
+  color: #334155;
 }
 
 .danger {
-  background: rgba(185, 28, 28, 0.08);
-  border: 1px solid rgba(185, 28, 28, 0.28);
-  color: #b91c1c;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.danger:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--danger);
 }
 
 .empty {
-  margin-top: 18px;
+  padding: 44px 0;
   text-align: center;
-  padding: 18px 12px;
-  color: var(--muted);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px dashed rgba(148, 163, 184, 0.28);
 }
 
 .emptyTitle {
   font-weight: 800;
-  color: var(--text);
-  margin-bottom: 4px;
+  font-size: 20px;
 }
 
 .emptySub {
-  font-size: 13px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+
+  .filterHead {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero,
+  .search,
+  .item,
+  .empty {
+    border-radius: 18px;
+  }
+
+  .title {
+    font-size: 24px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    flex-direction: column;
+  }
 }
 </style>

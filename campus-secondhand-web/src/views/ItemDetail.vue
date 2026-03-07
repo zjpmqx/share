@@ -1,7 +1,7 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { cancelOrder, confirmOrder, createOrder, getItem, listMessages, me, payOrder, postMessage, shipOrder } from '../services/api'
+import { createOrder, formatCategoryLabel, formatConditionLabel, getItem, listMessages, me, postMessage } from '../services/api'
 import { getToken } from '../services/auth'
 import { ElMessage } from 'element-plus'
 
@@ -33,10 +33,11 @@ async function loadMe() {
 
 async function loadItem() {
   loading.value = true
+  item.value = null
   try {
     const resp = await getItem(route.params.id)
     item.value = resp.data
-  } catch (e) {
+  } catch {
     ElMessage.error('加载商品信息失败')
   } finally {
     loading.value = false
@@ -45,6 +46,7 @@ async function loadItem() {
 
 async function loadMessages() {
   msgLoading.value = true
+  messages.value = []
   try {
     const resp = await listMessages(route.params.id)
     messages.value = resp.data || []
@@ -52,6 +54,11 @@ async function loadMessages() {
   } finally {
     msgLoading.value = false
   }
+}
+
+async function reloadByRouteParam() {
+  content.value = ''
+  await Promise.all([loadItem(), loadMessages()])
 }
 
 async function sendMessage() {
@@ -88,7 +95,12 @@ async function orderCreate() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadMe(), loadItem(), loadMessages()])
+  await Promise.all([loadMe(), reloadByRouteParam()])
+})
+
+watch(() => route.params.id, async (nextId, prevId) => {
+  if (!nextId || nextId === prevId) return
+  await reloadByRouteParam()
 })
 </script>
 
@@ -122,8 +134,8 @@ onMounted(async () => {
           </div>
 
           <div class="meta">
-            <el-tag size="small" type="info">{{ item.category }}</el-tag>
-            <el-tag size="small" type="success">成色 {{ item.conditionLevel }}</el-tag>
+            <el-tag size="small" type="info">{{ formatCategoryLabel(item.category) }}</el-tag>
+            <el-tag size="small" type="success">成色 {{ formatConditionLabel(item.conditionLevel) }}</el-tag>
             <el-tag size="small" type="warning">{{ item.status }}</el-tag>
           </div>
 
@@ -150,11 +162,11 @@ onMounted(async () => {
               <el-icon><ShoppingCart /></el-icon>
               立即下单
             </el-button>
-            
+
             <div class="hints">
               <el-alert
                 v-if="!getToken()"
-                title="提示：请先登录后下单"
+                title="提示：游客可浏览详情，登录后才能下单"
                 type="warning"
                 :closable="false"
                 show-icon
@@ -191,7 +203,7 @@ onMounted(async () => {
           <div v-if="msgLoading" class="msgLoading">
             <el-skeleton :rows="3" animated />
           </div>
-          
+
           <div v-else class="msgs">
             <div v-for="m in messages" :key="m.id" class="msg">
               <div class="msgHead">
@@ -206,7 +218,7 @@ onMounted(async () => {
               </div>
               <div class="msgContent">{{ m.content }}</div>
             </div>
-            
+
             <el-empty v-if="messages.length === 0" description="暂无留言" :image-size="60" />
           </div>
 
@@ -227,10 +239,10 @@ onMounted(async () => {
               发送
             </el-button>
           </div>
-          
+
           <el-alert
             v-if="!getToken()"
-            title="登录后才能留言"
+            title="游客可查看留言，登录后才能参与留言"
             type="warning"
             :closable="false"
             show-icon
@@ -250,89 +262,63 @@ onMounted(async () => {
   gap: 14px;
 }
 
-@media (max-width: 900px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-.mediaCard {
-  overflow: hidden;
+.mediaCard,
+.infoCard,
+.messageCard {
+  border-radius: 16px;
 }
 
 .mediaBox {
-  width: 100%;
-  height: 420px;
+  min-height: 420px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(99, 102, 241, 0.06));
-}
-
-@media (max-width: 900px) {
-  .mediaBox {
-    height: 320px;
-  }
-}
-
-@media (max-width: 520px) {
-  .mediaBox {
-    height: 260px;
-  }
-}
-
-.mediaBox :deep(.el-image) {
-  width: 100%;
-  height: 100%;
 }
 
 .head {
   display: flex;
-  align-items: flex-end;
   justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
 }
 
 .title {
-  font-size: 22px;
   margin: 0;
-  font-weight: 700;
-  flex: 1;
-  min-width: 200px;
+  font-size: 26px;
+  line-height: 1.3;
 }
 
 .price {
-  font-size: 28px;
-  font-weight: 800;
-  color: #ef4444;
+  font-size: 30px;
+  font-weight: 900;
+  color: #dc2626;
   white-space: nowrap;
 }
 
 .priceSymbol {
   font-size: 18px;
+  margin-right: 2px;
 }
 
 .meta {
-  margin: 12px 0;
+  margin-top: 14px;
   display: flex;
-  gap: 8px;
   flex-wrap: wrap;
+  gap: 8px;
 }
 
 .descTitle {
-  font-size: 14px;
-  color: var(--muted);
   margin: 0 0 8px;
   display: flex;
   align-items: center;
   gap: 6px;
+  font-size: 16px;
 }
 
 .desc p {
   margin: 0;
+  color: #475569;
   line-height: 1.7;
-  color: var(--text);
 }
 
 .actions {
@@ -341,36 +327,17 @@ onMounted(async () => {
   gap: 12px;
 }
 
-.hints {
-  width: 100%;
-}
-
-.cardHeader {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-}
-
-.msgLoading {
-  padding: 10px 0;
-}
-
 .msgs {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-bottom: 12px;
-  max-height: 400px;
-  overflow-y: auto;
-  padding-right: 4px;
 }
 
 .msg {
-  background: var(--surface-2);
-  border: 1px solid var(--border-2);
-  border-radius: 12px;
   padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: #f8fafc;
 }
 
 .msgHead {
@@ -378,44 +345,49 @@ onMounted(async () => {
   align-items: center;
   gap: 10px;
   margin-bottom: 8px;
-  flex-wrap: wrap;
 }
 
 .who {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
+  font-weight: 700;
 }
 
 .msgTime {
-  font-size: 12px;
-  color: var(--muted-2);
   margin-left: auto;
+  font-size: 12px;
+  color: #64748b;
 }
 
 .msgContent {
-  font-size: 14px;
+  color: #334155;
   line-height: 1.6;
-  color: var(--text);
 }
 
 .composer {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   gap: 10px;
-  align-items: flex-end;
+  margin-top: 14px;
 }
 
-@media (max-width: 520px) {
+@media (max-width: 960px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .mediaBox {
+    min-height: 300px;
+  }
+}
+
+@media (max-width: 640px) {
+  .head,
   .composer {
-    flex-direction: column;
+    grid-template-columns: 1fr;
+    display: grid;
   }
-  
-  .composer .el-button {
-    width: 100%;
-  }
-}
 
-.composer :deep(.el-textarea) {
-  flex: 1;
+  .price {
+    font-size: 24px;
+  }
 }
 </style>

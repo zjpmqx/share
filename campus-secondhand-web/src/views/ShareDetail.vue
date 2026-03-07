@@ -1,5 +1,6 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { ChatDotRound, Document, Download, Link, Picture, User, VideoCamera } from '@element-plus/icons-vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getShare, listShareComments, postShareComment, uploadFile } from '../services/api'
 import { getToken } from '../services/auth'
@@ -30,24 +31,22 @@ const COVER_RE = /\[\[cover:([^\]]+)\]\]/g
 function parseShareContent(raw) {
   const s = String(raw || '')
   let cover = ''
-  let m
-  while ((m = COVER_RE.exec(s)) !== null) {
-    const url = (m[1] || '').trim()
+  for (const match of s.matchAll(COVER_RE)) {
+    const url = (match[1] || '').trim()
     if (url) cover = url
   }
-  const text = s.replace(COVER_RE, '').trim()
+  const text = s.replaceAll(COVER_RE, '').trim()
   return { cover, text }
 }
 
 function parseCommentContent(raw) {
   const s = String(raw || '')
   const images = []
-  let m
-  while ((m = COMMENT_IMG_RE.exec(s)) !== null) {
-    const url = (m[1] || '').trim()
+  for (const match of s.matchAll(COMMENT_IMG_RE)) {
+    const url = (match[1] || '').trim()
     if (url) images.push(url)
   }
-  const text = s.replace(COMMENT_IMG_RE, '').trim()
+  const text = s.replaceAll(COMMENT_IMG_RE, '').trim()
   return { text, images }
 }
 
@@ -81,16 +80,16 @@ async function doUploadImage() {
   uploadImageError.value = ''
   try {
     const resp = await uploadFile(imageFile.value)
-    
+
     if (resp?.code !== 0) {
       throw new Error(resp?.message || '上传失败')
     }
-    
+
     const url = resp?.data
     if (!url || typeof url !== 'string') {
       throw new Error('上传失败：未返回有效地址')
     }
-    
+
     imageUrl.value = url
     ElMessage.success('图片上传成功')
   } catch (e) {
@@ -112,6 +111,12 @@ function clearImage() {
   }
 }
 
+function resetComposer() {
+  content.value = ''
+  postError.value = ''
+  clearImage()
+}
+
 function mediaKind(it) {
   const t = (it?.mediaType || 'NONE').toUpperCase()
   if (t === 'IMAGE' && it.mediaUrl) return 'image'
@@ -130,6 +135,7 @@ function showCover(it) {
 async function loadShare() {
   loading.value = true
   errorMsg.value = ''
+  share.value = null
   try {
     const resp = await getShare(route.params.id)
     const data = resp.data
@@ -146,6 +152,7 @@ async function loadShare() {
 
 async function loadComments() {
   commentsLoading.value = true
+  comments.value = []
   try {
     const resp = await listShareComments(route.params.id)
     comments.value = (resp.data || []).map((m) => ({
@@ -155,6 +162,11 @@ async function loadComments() {
   } finally {
     commentsLoading.value = false
   }
+}
+
+async function reloadByRouteParam() {
+  resetComposer()
+  await Promise.all([loadShare(), loadComments()])
 }
 
 async function send() {
@@ -183,11 +195,11 @@ async function send() {
 function getTypeIcon(type) {
   const t = (type || 'NONE').toUpperCase()
   switch (t) {
-    case 'IMAGE': return 'Picture'
-    case 'VIDEO': return 'VideoCamera'
-    case 'URL': return 'Link'
-    case 'FILE': return 'Document'
-    default: return 'Document'
+    case 'IMAGE': return Picture
+    case 'VIDEO': return VideoCamera
+    case 'URL': return Link
+    case 'FILE': return Document
+    default: return Document
   }
 }
 
@@ -203,7 +215,12 @@ function getTypeTagType(type) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadShare(), loadComments()])
+  await reloadByRouteParam()
+})
+
+watch(() => route.params.id, async (nextId, prevId) => {
+  if (!nextId || nextId === prevId) return
+  await reloadByRouteParam()
 })
 </script>
 
@@ -224,7 +241,9 @@ onMounted(async () => {
         <h1 class="title">{{ share.title }}</h1>
         <div class="heroMeta">
           <el-tag :type="getTypeTagType(share.mediaType)" size="small">
-            <el-icon><component :is="getTypeIcon(share.mediaType)" /></el-icon>
+            <el-icon>
+              <component :is="getTypeIcon(share.mediaType)" />
+            </el-icon>
             {{ share.mediaType || 'NONE' }}
           </el-tag>
           <span class="heroHint">分享详情与评论互动</span>
@@ -242,7 +261,6 @@ onMounted(async () => {
                 :preview-src-list="[share._cover]"
                 lazy
               />
-
               <el-image
                 v-else-if="mediaKind(share) === 'image'"
                 :src="share.mediaUrl"
@@ -250,11 +268,11 @@ onMounted(async () => {
                 :preview-src-list="[share.mediaUrl]"
                 lazy
               />
-
               <video v-else-if="mediaKind(share) === 'video'" controls :src="share.mediaUrl"></video>
-
               <div v-else class="emptyMedia">
-                <el-icon><Document /></el-icon>
+                <el-icon>
+                  <Document />
+                </el-icon>
                 <span>纯文字分享</span>
               </div>
             </div>
@@ -267,17 +285,17 @@ onMounted(async () => {
                   rel="noopener noreferrer"
                   :download="(share?.mediaUrl || '').split('/').pop() || 'attachment'"
                   class="actionLink"
-                >
-                  下载附件
-                </a>
+                >下载附件</a>
               </el-button>
             </div>
-
             <div v-else-if="mediaKind(share) === 'link'" class="mediaActions">
               <el-button type="primary" :icon="Link" class="actionBtn">
-                <a :href="share.linkUrl" target="_blank" rel="noopener noreferrer" class="actionLink">
-                  打开链接
-                </a>
+                <a
+                  :href="share.linkUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="actionLink"
+                >打开链接</a>
               </el-button>
             </div>
           </el-card>
@@ -297,14 +315,15 @@ onMounted(async () => {
             </template>
 
             <el-skeleton v-if="commentsLoading" :rows="4" animated />
-
             <div v-else class="msgs">
               <div v-for="m in comments" :key="m.id" class="msg">
                 <div class="msgHead">
                   <el-avatar :size="32">
                     <img v-if="m.avatarUrl" :src="m.avatarUrl" alt="" />
                     <template v-else>
-                      <el-icon><User /></el-icon>
+                      <el-icon>
+                        <User />
+                      </el-icon>
                     </template>
                   </el-avatar>
                   <div class="who">{{ m.userName || ('用户' + (m.userId || '')) }}</div>
@@ -340,24 +359,32 @@ onMounted(async () => {
                 placeholder="说点什么..."
                 :disabled="!getToken() || posting"
               />
-
               <input ref="imageInput" class="imgPick" type="file" accept="image/*" @change="onPickImage" />
 
               <div class="actions">
-                <el-button :icon="Picture" :disabled="!getToken() || posting || uploadingImage" @click="openImagePicker">
-                  {{ uploadingImage ? '上传中' : '添加图片' }}
-                </el-button>
-                <el-button type="primary" :icon="ChatDotRound" :disabled="!getToken() || posting || uploadingImage" @click="send" :loading="posting">
-                  {{ posting ? '发送中...' : '发表评论' }}
-                </el-button>
+                <el-button
+                  :icon="Picture"
+                  :disabled="!getToken() || posting || uploadingImage"
+                  @click="openImagePicker"
+                >{{ uploadingImage ? '上传中' : '添加图片' }}</el-button>
+                <el-button
+                  type="primary"
+                  :icon="ChatDotRound"
+                  :disabled="!getToken() || posting || uploadingImage"
+                  :loading="posting"
+                  @click="send"
+                >{{ posting ? '发送中...' : '发表评论' }}</el-button>
               </div>
             </div>
 
             <div v-if="uploadImageError || imageUrl" class="composerMeta">
-              <el-alert v-if="uploadImageError" type="error" :closable="false" style="margin-bottom: 10px;">
-                {{ uploadImageError }}
-              </el-alert>
-
+              <el-alert
+                v-if="uploadImageError"
+                :title="uploadImageError"
+                type="error"
+                :closable="false"
+                style="margin-bottom: 10px;"
+              />
               <div v-if="imageUrl" class="imgPreview">
                 <el-image :src="imageUrl" class="imgPreviewImg" fit="cover" />
                 <span class="imgPreviewText">已添加图片</span>
@@ -365,9 +392,13 @@ onMounted(async () => {
               </div>
             </div>
 
-            <el-alert v-if="!getToken()" type="warning" :closable="false" style="margin-top: 10px;">
-              登录后才能评论
-            </el-alert>
+            <el-alert
+              v-if="!getToken()"
+              title="登录后才能评论"
+              type="warning"
+              :closable="false"
+              style="margin-top: 10px;"
+            />
           </el-card>
         </div>
       </div>

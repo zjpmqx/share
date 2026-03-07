@@ -1,38 +1,46 @@
 <script setup>
+import { RefreshRight, Search } from '@element-plus/icons-vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { listItems, onlinePing } from '../services/api'
+import {
+  CATEGORY_OPTIONS,
+  CONDITION_OPTIONS,
+  formatCategoryLabel,
+  formatConditionLabel,
+  listItems,
+  normalizeConditionValue,
+  onlinePing,
+} from '../services/api'
 import { onItemApproved } from '../services/events'
+import { getToken } from '../services/auth'
 import { ElMessage } from 'element-plus'
 
 const loading = ref(false)
+const loadingMore = ref(false)
 const items = ref([])
 const keyword = ref('')
 const category = ref('')
 const conditionLevel = ref('')
-const priceMin = ref('')
-const priceMax = ref('')
+const priceMin = ref(null)
+const priceMax = ref(null)
 const errorMsg = ref('')
+const page = ref(0)
+const pageSize = 20
+const hasMore = ref(false)
 
 const onlineUsers = ref(0)
 const tickerText = computed(() => `头条：当前在线人数 ${onlineUsers.value} 人在线`)
-
-const categories = [
-  { value: '', label: '全部分类' },
-  { value: 'BOOK', label: '书籍教材' },
-  { value: 'DIGITAL', label: '数码产品' },
-  { value: 'LIFE', label: '生活用品' },
-  { value: 'SPORT', label: '运动器材' },
-  { value: 'CLOTHING', label: '服装配饰' },
-  { value: 'OTHER', label: '其他' }
-]
-
-const conditions = [
-  { value: '', label: '全部成色' },
-  { value: 'NEW', label: '全新' },
-  { value: 'LIKE_NEW', label: '几乎全新' },
-  { value: 'GOOD', label: '良好' },
-  { value: 'FAIR', label: '一般' }
-]
+const categories = CATEGORY_OPTIONS
+const conditions = CONDITION_OPTIONS
+const isLoggedIn = computed(() => !!getToken())
+const activeFilterCount = computed(() => {
+  let count = 0
+  if (keyword.value.trim()) count += 1
+  if (category.value) count += 1
+  if (conditionLevel.value) count += 1
+  if (priceMin.value !== null && priceMin.value !== '') count += 1
+  if (priceMax.value !== null && priceMax.value !== '') count += 1
+  return count
+})
 
 function isSameList(a, b) {
   if (!Array.isArray(a) || !Array.isArray(b)) return false
@@ -43,54 +51,90 @@ function isSameList(a, b) {
   return true
 }
 
-async function load() {
-  loading.value = true
+function parseOptionalPrice(value) {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function applyClientSideFilters(list) {
+  const expectedCondition = normalizeConditionValue(conditionLevel.value)
+  const min = parseOptionalPrice(priceMin.value)
+  const max = parseOptionalPrice(priceMax.value)
+
+  return (Array.isArray(list) ? list : []).filter((item) => {
+    if (expectedCondition && normalizeConditionValue(item?.conditionLevel) !== expectedCondition) {
+      return false
+    }
+    const price = Number(item?.price)
+    if (!Number.isFinite(price)) {
+      return false
+    }
+    if (min !== null && price < min) {
+      return false
+    }
+    if (max !== null && price > max) {
+      return false
+    }
+    return true
+  })
+}
+
+async function load(targetPage = 0) {
+  const isLoadMore = targetPage > 0
+  if (isLoadMore) {
+    loadingMore.value = true
+  } else {
+    loading.value = true
+  }
   errorMsg.value = ''
   try {
     const kw = keyword.value.trim()
-    const cat = category.value.trim().toUpperCase()
-    const cond = conditionLevel.value.trim().toUpperCase()
-    
-    const params = { keyword: kw, category: cat, page: 0, size: 20 }
-    
-    if (cond) {
-      params.condition = cond
-    }
-    
+    const cat = String(category.value || '').trim().toUpperCase()
+    const params = { keyword: kw, category: cat, page: targetPage, size: pageSize }
+
     const resp = await listItems(params)
-    let next = resp.data || []
-    
-    if (priceMin.value || priceMax.value) {
-      const min = parseFloat(priceMin.value) || 0
-      const max = parseFloat(priceMax.value) || Infinity
-      next = next.filter(item => {
-        const price = parseFloat(item.price)
-        return price >= min && price <= max
-      })
-    }
-    
+    const currentPageItems = applyClientSideFilters(resp.data || [])
+    const next = isLoadMore ? [...items.value, ...currentPageItems] : currentPageItems
+
+    page.value = targetPage
+    hasMore.value = Array.isArray(resp.data) && resp.data.length === pageSize
+
     if (!isSameList(items.value, next)) {
       items.value = next
     }
-    
-    if (next.length === 0 && kw) {
-      ElMessage.info('未找到相关商品，试试其他关键词吧')
+
+    if (!isLoadMore && next.length === 0 && (kw || cat || conditionLevel.value || priceMin.value !== null || priceMax.value !== null)) {
+      ElMessage.info('未找到符合筛选条件的商品，试试放宽条件吧')
     }
   } catch (e) {
-    items.value = []
+    if (!isLoadMore) {
+      items.value = []
+    }
     errorMsg.value = e?.response?.data?.message || e?.message || '加载失败'
     ElMessage.error(errorMsg.value)
   } finally {
-    loading.value = false
+    if (isLoadMore) {
+      loadingMore.value = false
+    } else {
+      loading.value = false
+    }
   }
+}
+
+function loadMore() {
+  if (loading.value || loadingMore.value || !hasMore.value) return
+  load(page.value + 1)
 }
 
 function resetFilters() {
   keyword.value = ''
   category.value = ''
   conditionLevel.value = ''
-  priceMin.value = ''
-  priceMax.value = ''
+  priceMin.value = null
+  priceMax.value = null
+  page.value = 0
+  hasMore.value = false
   load()
 }
 
@@ -141,29 +185,55 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="hero">
-      <div class="heroLeft">
-        <div class="heroTitle">
-          <el-icon class="heroCartIcon"><ShoppingCart /></el-icon>
-          淘好物
-          <span class="heroEmoji">(๑•̀ㅂ•́)و✧</span>
+    <section class="hero">
+      <div class="heroContent">
+        <div class="heroBadge">校园二手精选站</div>
+        <div class="heroTitleWrap">
+          <div class="heroTitle">
+            <el-icon class="heroCartIcon"><ShoppingCart /></el-icon>
+            淘好物
+            <span class="heroEmoji">(๑•̀ㅂ•́)و✧</span>
+          </div>
+          <div class="heroSub">把闲置变成惊喜，用更轻松的方式找到高性价比好物。</div>
         </div>
-        <div class="heroSub">校园二手 · 省钱也有好品质</div>
+
+        <div class="heroHighlights">
+          <div class="highlightCard highlightPrimary">
+            <div class="highlightLabel">实时在线</div>
+            <div class="highlightValue">{{ onlineUsers }}</div>
+            <div class="highlightMeta">随时看看同学们正在淘什么</div>
+          </div>
+          <div class="highlightCard glow-card floaty">
+            <div class="highlightLabel">当前展示</div>
+            <div class="highlightValue">{{ items.length }}</div>
+            <div class="highlightMeta">支持关键词、分类、成色与价格筛选</div>
+          </div>
+        </div>
+
         <div class="heroBadges">
-          <span class="badge">实时在线 {{ onlineUsers }}</span>
-          <span class="badge">当前商品 {{ items.length }}</span>
+          <span class="badge">未登录也能浏览</span>
           <span class="badge">支持多条件筛选</span>
+          <span class="badge">商品持续上新</span>
         </div>
       </div>
 
-      <el-card class="searchCard" shadow="never">
-        <div class="cardTitleRow">快速淘货</div>
+      <el-card class="searchCard glow-card motion-enter-soft motion-delay-2" shadow="never">
+        <div class="cardTop">
+          <div>
+            <div class="cardEyebrow">快速淘货</div>
+            <div class="cardTitle">按你关心的条件精准筛选</div>
+          </div>
+          <div class="resultPanel">
+            <div class="resultValue">{{ items.length }}</div>
+            <div class="resultLabel">当前结果</div>
+          </div>
+        </div>
 
         <div class="searchRow">
           <el-input
             v-model="keyword"
             class="searchInput"
-            placeholder="搜索关键词：教材/手机/桌子..."
+            placeholder="搜索关键词：教材 / 手机 / 桌子..."
             :prefix-icon="Search"
             clearable
             @keyup.enter="load"
@@ -182,14 +252,19 @@ onUnmounted(() => {
           </el-select>
 
           <div class="priceFilter">
-            <span class="priceLabel">价格</span>
+            <span class="priceLabel">价格区间</span>
             <el-input-number v-model="priceMin" :min="0" placeholder="最低价" :precision="2" size="default" class="priceInput" />
             <span class="priceSeparator">~</span>
             <el-input-number v-model="priceMax" :min="0" placeholder="最高价" :precision="2" size="default" class="priceInput" />
           </div>
         </div>
+
+        <div class="filterSummary">
+          <span class="summaryTag">已启用筛选 {{ activeFilterCount }} 项</span>
+          <span class="summaryText">想更快找到心仪商品？试试组合关键词、成色和预算范围。</span>
+        </div>
       </el-card>
-    </div>
+    </section>
 
     <div v-if="errorMsg" class="error">
       <el-alert :title="errorMsg" type="error" show-icon :closable="false" />
@@ -199,39 +274,64 @@ onUnmounted(() => {
       <el-skeleton :rows="5" animated />
     </div>
 
-    <div v-else class="grid">
-      <RouterLink v-for="it in items" :key="it.id" class="itemCard" :to="`/items/${it.id}`">
-        <el-card :body-style="{ padding: '0px' }" class="cardInner" shadow="hover">
-          <div class="cover">
-            <div class="img">
-              <img v-if="it.coverImageUrl" :src="it.coverImageUrl" alt="" loading="lazy" />
-              <el-empty v-else description="暂无图片" :image-size="56" />
-              <div class="floatingPrice">¥{{ it.price }}</div>
+    <template v-else>
+      <section class="contentHeader motion-enter motion-delay-2">
+        <div>
+          <div class="contentEyebrow">好物广场</div>
+          <h2 class="contentTitle">发现同学们正在出售的精选闲置</h2>
+        </div>
+        <div class="contentMeta">
+          <span class="metaChip">在线 {{ onlineUsers }}</span>
+          <span class="metaChip">展示 {{ items.length }} 件</span>
+        </div>
+      </section>
+
+      <div v-if="items.length > 0" class="grid motion-enter-soft motion-delay-3">
+        <RouterLink v-for="(it, index) in items" :key="it.id" class="itemCard" :style="{ '--card-delay': `${Math.min(index, 7) * 60}ms` }" :to="`/items/${it.id}`">
+          <el-card :body-style="{ padding: '0px' }" class="cardInner glow-card" shadow="hover">
+            <div class="cover">
+              <div class="img">
+                <img v-if="it.coverImageUrl" :src="it.coverImageUrl" alt="" loading="lazy" />
+                <el-empty v-else description="暂无图片" :image-size="56" />
+                <div class="floatingPrice">¥{{ it.price }}</div>
+              </div>
             </div>
-          </div>
 
-          <div class="body">
-            <div class="productTitle" :title="it.title">{{ it.title }}</div>
+            <div class="body">
+              <div class="productTitle" :title="it.title">{{ it.title }}</div>
 
-            <div class="chips">
-              <el-tag size="small" type="info">{{ it.category }}</el-tag>
-              <el-tag size="small" type="success">成色 {{ it.conditionLevel }}</el-tag>
-              <el-tag size="small" type="warning">{{ it.status }}</el-tag>
+              <div class="chips">
+                <el-tag size="small" type="info">{{ formatCategoryLabel(it.category) }}</el-tag>
+                <el-tag size="small" type="success">成色 {{ formatConditionLabel(it.conditionLevel) }}</el-tag>
+                <el-tag size="small" type="warning">{{ it.status }}</el-tag>
+              </div>
+
+              <div class="bottom">
+                <div class="priceHint">喜欢就冲～</div>
+                <el-button type="primary" size="small" link>查看详情</el-button>
+              </div>
             </div>
+          </el-card>
+        </RouterLink>
+      </div>
 
-            <div class="bottom">
-              <div class="priceHint">喜欢就冲～</div>
-              <el-button type="primary" size="small" link>查看详情</el-button>
-            </div>
-          </div>
-        </el-card>
-      </RouterLink>
-    </div>
+      <div v-else class="emptyState motion-enter motion-delay-3">
+        <el-empty description="暂无商品，来发一个让同学们眼前一亮吧">
+          <template #image>
+            <div class="emptyIllustration">✨</div>
+          </template>
+          <div class="emptyText">现在发闲置，也许下一位同学正好在找它。</div>
+          <el-button v-if="isLoggedIn" type="primary" @click="$router.push('/publish')">去发布商品</el-button>
+          <el-button v-else type="primary" @click="$router.push('/login?redirect=/publish')">登录后发布</el-button>
+        </el-empty>
+      </div>
+    </template>
 
-    <div v-if="!loading && items.length === 0" class="empty">
-      <el-empty description="暂无商品，来发一个让同学们眼前一亮吧">
-        <el-button type="primary" @click="$router.push('/publish')">去发布商品</el-button>
-      </el-empty>
+    <div v-if="items.length > 0" class="loadMoreWrap">
+      <el-button v-if="hasMore" :loading="loadingMore" plain class="loadMoreBtn" @click="loadMore">
+        {{ loadingMore ? '加载中...' : '加载更多商品' }}
+      </el-button>
+      <div v-else class="loadMoreEnd">已经到底啦，当前条件下的商品都展示完了</div>
     </div>
   </div>
 </template>
@@ -240,15 +340,16 @@ onUnmounted(() => {
 .homePage {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 18px;
 }
 
 .ticker {
-  margin: 6px 0 4px;
+  margin-top: 4px;
   background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(16, 185, 129, 0.12));
   border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 12px;
-  padding: 7px 12px;
+  border-radius: 14px;
+  padding: 8px 14px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
 }
 
 .tickerTrack {
@@ -280,30 +381,55 @@ onUnmounted(() => {
 }
 
 .hero {
-  margin: 2px 0 6px;
-  border-radius: 18px;
-  padding: 18px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.14), rgba(99, 102, 241, 0.12), rgba(16, 185, 129, 0.13));
+  position: relative;
+  overflow: hidden;
+  border-radius: 26px;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.65), transparent 28%),
+    linear-gradient(135deg, rgba(59, 130, 246, 0.14), rgba(99, 102, 241, 0.12), rgba(16, 185, 129, 0.13));
   border: 1px solid rgba(148, 163, 184, 0.24);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(420px, 0.95fr);
-  gap: 14px;
-  align-items: start;
+  grid-template-columns: minmax(0, 1.08fr) minmax(420px, 0.92fr);
+  gap: 18px;
+  align-items: stretch;
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.08);
 }
 
-.heroLeft {
+.heroContent {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.heroBadge {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  font-size: 12px;
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.heroTitleWrap {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
 .heroTitle {
-  font-size: 30px;
+  font-size: 36px;
+  line-height: 1.1;
   font-weight: 900;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.3px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: #0f172a;
 }
 
 .heroCartIcon {
@@ -317,41 +443,124 @@ onUnmounted(() => {
 }
 
 .heroSub {
+  max-width: 560px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.heroHighlights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.highlightCard {
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.highlightPrimary {
+  background: linear-gradient(145deg, rgba(37, 99, 235, 0.16), rgba(255, 255, 255, 0.84));
+}
+
+.highlightLabel {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.highlightValue {
+  font-size: 32px;
+  font-weight: 900;
+  color: #0f172a;
+  line-height: 1;
+}
+
+.highlightMeta {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
 }
 
 .heroBadges {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
-  margin-top: 2px;
 }
 
 .badge {
   font-size: 12px;
-  padding: 4px 10px;
+  padding: 7px 12px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.76);
   border: 1px solid rgba(148, 163, 184, 0.24);
+  color: #334155;
 }
 
 .searchCard {
-  border-radius: 14px;
+  height: 100%;
+  border-radius: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(14px);
 }
 
-.cardTitleRow {
-  font-size: 14px;
+.cardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.cardEyebrow {
+  font-size: 12px;
   font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #2563eb;
+  margin-bottom: 8px;
+}
+
+.cardTitle {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.35;
+  color: #0f172a;
+}
+
+.resultPanel {
+  flex-shrink: 0;
+  min-width: 96px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(37, 99, 235, 0.12), rgba(99, 102, 241, 0.08));
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  text-align: center;
+}
+
+.resultValue {
+  font-size: 26px;
+  line-height: 1;
+  font-weight: 900;
+  color: #1d4ed8;
+}
+
+.resultLabel {
+  margin-top: 6px;
+  font-size: 12px;
   color: var(--muted);
-  margin-bottom: 10px;
 }
 
 .searchRow {
   display: flex;
   gap: 10px;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .searchInput {
@@ -359,8 +568,9 @@ onUnmounted(() => {
 }
 
 .searchBtn,
-.resetBtn {
-  border-radius: 10px;
+.resetBtn,
+.loadMoreBtn {
+  border-radius: 12px;
 }
 
 .filtersRow {
@@ -371,7 +581,7 @@ onUnmounted(() => {
 }
 
 .filterSelect {
-  min-width: 140px;
+  min-width: 148px;
 }
 
 .priceFilter {
@@ -387,28 +597,94 @@ onUnmounted(() => {
 }
 
 .priceInput {
-  width: 118px;
+  width: 122px;
 }
 
 .priceSeparator {
   color: var(--muted);
 }
 
+.filterSummary {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.26);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.summaryTag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.summaryText {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .error {
-  margin: 4px 0 2px;
+  margin-top: -4px;
 }
 
 .skeletonContainer {
-  padding: 20px;
+  padding: 24px;
   background: var(--surface);
-  border-radius: 14px;
+  border-radius: 20px;
   border: 1px solid var(--border-2);
+}
+
+.contentHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.contentEyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #0f766e;
+  margin-bottom: 6px;
+}
+
+.contentTitle {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.35;
+  color: #0f172a;
+}
+
+.contentMeta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.metaChip {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 18px;
 }
 
 .itemCard {
@@ -419,14 +695,20 @@ onUnmounted(() => {
 
 .cardInner {
   height: 100%;
-  border-radius: 14px;
+  border-radius: 20px;
   overflow: hidden;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
 .cardInner:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 16px 26px rgba(15, 23, 42, 0.12);
+  transform: translateY(-7px);
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.12);
+  border-color: rgba(59, 130, 246, 0.22);
+}
+
+.itemCard:hover .img img {
+  transform: scale(1.03);
 }
 
 .cover {
@@ -434,8 +716,8 @@ onUnmounted(() => {
 }
 
 .img {
-  height: 176px;
-  background: var(--surface-2);
+  height: 196px;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.92));
   border-bottom: 1px solid var(--border-2);
   display: flex;
   align-items: center;
@@ -449,46 +731,56 @@ onUnmounted(() => {
   height: 100%;
   object-fit: contain;
   display: block;
+  transition: transform var(--transition-slow);
 }
 
 .floatingPrice {
   position: absolute;
-  right: 10px;
-  top: 10px;
-  background: rgba(239, 68, 68, 0.9);
+  right: 12px;
+  top: 12px;
+  background: rgba(239, 68, 68, 0.92);
   color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 4px 8px;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 6px 10px;
   border-radius: 999px;
+  box-shadow: 0 10px 20px rgba(239, 68, 68, 0.22);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.itemCard:hover .floatingPrice {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 14px 26px rgba(239, 68, 68, 0.26);
 }
 
 .body {
-  padding: 12px;
+  padding: 14px;
 }
 
 .productTitle {
   font-weight: 800;
-  margin-bottom: 10px;
-  line-height: 1.35;
+  font-size: 16px;
+  margin-bottom: 12px;
+  line-height: 1.45;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  min-height: 38px;
+  min-height: 46px;
 }
 
 .chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .bottom {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
 
 .priceHint {
@@ -496,49 +788,100 @@ onUnmounted(() => {
   color: var(--muted);
 }
 
-.empty {
-  margin-top: 8px;
+.emptyState {
+  border-radius: 22px;
+  padding: 28px 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(248, 250, 252, 0.96));
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.06);
+}
+
+.emptyIllustration {
+  width: 90px;
+  height: 90px;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.14), rgba(16, 185, 129, 0.14));
+  font-size: 42px;
+}
+
+.emptyText {
+  margin: 6px 0 14px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.loadMoreWrap {
+  display: flex;
+  justify-content: center;
+  margin: -2px 0 16px;
+}
+
+.loadMoreEnd {
+  color: var(--muted);
+  font-size: 13px;
 }
 
 @media (max-width: 1200px) {
-  .grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   .hero {
     grid-template-columns: 1fr;
+  }
+
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 900px) {
+  .hero {
+    padding: 20px;
+  }
+
+  .heroTitle {
+    font-size: 30px;
+  }
+
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 640px) {
-  .grid {
-    grid-template-columns: 1fr;
+  .homePage {
+    gap: 14px;
   }
 
   .hero {
-    padding: 14px;
+    padding: 16px;
+    border-radius: 20px;
   }
 
   .heroTitle {
     font-size: 24px;
   }
 
+  .heroHighlights {
+    grid-template-columns: 1fr;
+  }
+
+  .cardTop,
   .searchRow,
-  .filtersRow {
+  .filtersRow,
+  .filterSummary,
+  .contentHeader,
+  .bottom {
     flex-direction: column;
     align-items: stretch;
   }
 
+  .resultPanel,
   .searchBtn,
   .resetBtn,
   .filterSelect,
-  .priceInput {
+  .priceInput,
+  .loadMoreBtn {
     width: 100%;
   }
 
@@ -546,8 +889,18 @@ onUnmounted(() => {
     width: 100%;
   }
 
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
   .img {
-    height: 210px;
+    height: 220px;
+  }
+
+  .contentTitle,
+  .cardTitle {
+    font-size: 18px;
   }
 }
 </style>

@@ -1,4 +1,15 @@
 <script setup>
+import {
+  ChatLineSquare,
+  Document,
+  Download,
+  Link,
+  Picture,
+  Plus,
+  Search,
+  VideoCamera,
+  VideoPlay,
+} from '@element-plus/icons-vue'
 import { onMounted, ref } from 'vue'
 import { listShares } from '../services/api'
 import { ElMessage } from 'element-plus'
@@ -15,7 +26,7 @@ const mediaTypes = [
   { value: 'IMAGE', label: '图片' },
   { value: 'VIDEO', label: '视频' },
   { value: 'URL', label: '链接' },
-  { value: 'FILE', label: '文件' }
+  { value: 'FILE', label: '文件' },
 ]
 
 const COVER_RE = /\[\[cover:([^\]]+)\]\]/g
@@ -23,12 +34,11 @@ const COVER_RE = /\[\[cover:([^\]]+)\]\]/g
 function parseShareContent(raw) {
   const s = String(raw || '')
   let cover = ''
-  let m
-  while ((m = COVER_RE.exec(s)) !== null) {
-    const url = (m[1] || '').trim()
+  for (const match of s.matchAll(COVER_RE)) {
+    const url = (match[1] || '').trim()
     if (url) cover = url
   }
-  const text = s.replace(COVER_RE, '').trim()
+  const text = s.replaceAll(COVER_RE, '').trim()
   return { cover, text }
 }
 
@@ -50,19 +60,18 @@ async function load() {
       const parts = parseShareContent(it?.content)
       return { ...it, _cover: parts.cover, _text: parts.text }
     })
-    
+
     if (filterType.value) {
-      next = next.filter(it => it.mediaType === filterType.value)
+      next = next.filter((it) => it.mediaType === filterType.value)
     }
-    
+
     if (searchKeyword.value.trim()) {
       const kw = searchKeyword.value.toLowerCase()
-      next = next.filter(it => 
-        it.title.toLowerCase().includes(kw) || 
-        it._text.toLowerCase().includes(kw)
+      next = next.filter(
+        (it) => it.title.toLowerCase().includes(kw) || it._text.toLowerCase().includes(kw),
       )
     }
-    
+
     if (!isSameList(shares.value, next)) {
       shares.value = next
     }
@@ -94,22 +103,32 @@ function coverPreview(it) {
 function getTypeIcon(type) {
   const t = (type || 'NONE').toUpperCase()
   switch (t) {
-    case 'IMAGE': return 'Picture'
-    case 'VIDEO': return 'VideoCamera'
-    case 'URL': return 'Link'
-    case 'FILE': return 'Document'
-    default: return 'Document'
+    case 'IMAGE':
+      return Picture
+    case 'VIDEO':
+      return VideoCamera
+    case 'URL':
+      return Link
+    case 'FILE':
+      return Document
+    default:
+      return Document
   }
 }
 
 function getTypeTagType(type) {
   const t = (type || 'NONE').toUpperCase()
   switch (t) {
-    case 'IMAGE': return 'success'
-    case 'VIDEO': return 'warning'
-    case 'URL': return 'primary'
-    case 'FILE': return 'danger'
-    default: return 'info'
+    case 'IMAGE':
+      return 'success'
+    case 'VIDEO':
+      return 'warning'
+    case 'URL':
+      return 'primary'
+    case 'FILE':
+      return 'danger'
+    default:
+      return 'info'
   }
 }
 
@@ -119,8 +138,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page shareListPage">
-    <div class="hero">
+  <div class="page shareListPage motion-enter-soft">
+    <div class="hero glow-card motion-enter">
+      <div class="heroSpark sparkLeft floaty"></div>
+      <div class="heroSpark sparkRight pulse-dot"></div>
       <div class="heroMain">
         <div class="title">
           <el-icon><ChatLineSquare /></el-icon>
@@ -134,13 +155,13 @@ onMounted(() => {
         </div>
       </div>
 
-      <router-link class="publishBtn" to="/shares/publish">
+      <router-link class="publishBtn motion-enter-soft motion-delay-2" to="/shares/publish">
         <el-icon><Plus /></el-icon>
         发布分享
       </router-link>
     </div>
 
-    <el-card class="filterCard" shadow="never">
+    <el-card class="filterCard glow-card motion-enter-soft motion-delay-1" shadow="never">
       <div class="filters">
         <el-input
           v-model="searchKeyword"
@@ -159,9 +180,9 @@ onMounted(() => {
 
     <el-skeleton v-if="loading && shares.length === 0" :rows="8" animated style="margin-top: 14px;" />
 
-    <div v-else class="grid">
-      <router-link v-for="it in shares" :key="it.id" class="card" :to="`/shares/${it.id}`">
-        <el-card :body-style="{ padding: '0' }" class="cardInner" shadow="hover">
+    <div v-else class="grid motion-enter-soft motion-delay-2">
+      <router-link v-for="(it, index) in shares" :key="it.id" class="card" :style="{ '--share-delay': `${Math.min(index, 8) * 55}ms` }" :to="`/shares/${it.id}`">
+        <el-card :body-style="{ padding: '0' }" class="cardInner glow-card" shadow="hover">
           <div class="media">
             <div v-if="coverPreview(it)" class="mediaContent">
               <el-image :src="coverPreview(it)" fit="cover" lazy />
@@ -218,7 +239,7 @@ onMounted(() => {
       </router-link>
     </div>
 
-    <div v-if="!loading && shares.length === 0" class="empty">
+    <div v-if="!loading && shares.length === 0" class="empty motion-enter motion-delay-3">
       <el-empty description="暂无分享，来当第一个发布者吧">
         <router-link to="/shares/publish">
           <el-button type="primary">去发布第一个分享</el-button>
@@ -236,6 +257,8 @@ onMounted(() => {
 }
 
 .hero {
+  position: relative;
+  overflow: hidden;
   border-radius: 18px;
   padding: 18px;
   background: linear-gradient(135deg, rgba(59, 130, 246, 0.14), rgba(16, 185, 129, 0.16));
@@ -245,6 +268,28 @@ onMounted(() => {
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+.heroSpark {
+  position: absolute;
+  width: 86px;
+  height: 86px;
+  border-radius: 999px;
+  pointer-events: none;
+  filter: blur(8px);
+  opacity: 0.4;
+}
+
+.sparkLeft {
+  top: -18px;
+  left: -18px;
+  background: rgba(59, 130, 246, 0.28);
+}
+
+.sparkRight {
+  right: 16px;
+  bottom: 12px;
+  background: rgba(16, 185, 129, 0.22);
 }
 
 .heroMain {
@@ -367,6 +412,11 @@ onMounted(() => {
 .mediaContent :deep(.el-image) {
   width: 100%;
   height: 100%;
+}
+
+.mediaContent :deep(img),
+.mediaContent video {
+  transition: transform var(--transition-slow);
 }
 
 .mediaContent video {

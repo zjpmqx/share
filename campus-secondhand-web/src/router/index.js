@@ -17,8 +17,8 @@ import AdminItems from '../views/AdminItems.vue'
 import AdminShares from '../views/AdminShares.vue'
 import AdminUsers from '../views/AdminUsers.vue'
 import Profile from '../views/Profile.vue'
-import { clearToken, getRole, getToken, getShareGateToken, setRole } from '../services/auth'
-import { me } from '../services/api'
+import { clearToken, getRole, getToken, setRole } from '../services/auth'
+import { getShareGateStatus, me } from '../services/api'
 
 const routes = [
   {
@@ -62,8 +62,8 @@ router.beforeEach(async (to) => {
 
   if (to.path.startsWith('/shares') && to.name !== 'shareVerify') {
     try {
-      const shareGateToken = getShareGateToken()
-      if (!shareGateToken) {
+      const resp = await getShareGateStatus()
+      if (!resp?.data?.verified) {
         return { name: 'shareVerify', query: { redirect: to.fullPath } }
       }
     } catch {
@@ -71,8 +71,7 @@ router.beforeEach(async (to) => {
     }
   }
 
-  // 方案 B：除登录/注册外，其他页面都必须登录
-  if (!token && to.name !== 'login' && to.name !== 'register') {
+  if (!token && to.meta?.requiresAuth) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
 
@@ -83,7 +82,6 @@ router.beforeEach(async (to) => {
   if (to.meta?.requiresAdmin) {
     let role = getRole()
     try {
-      // 不要完全信任本地缓存的 role；普通窗口可能残留旧值(USER)导致无法进入后台
       if (!role || role !== 'ADMIN') {
         const resp = await me()
         role = resp?.data?.role || ''

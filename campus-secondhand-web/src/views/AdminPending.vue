@@ -1,10 +1,14 @@
 <script setup>
-import { onMounted, ref } from 'vue'
-import { adminAuditItem, adminPendingItems } from '../services/api'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessageBox } from 'element-plus'
+import { adminAuditItem, adminPendingItems, formatCategoryLabel, formatConditionLabel } from '../services/api'
 
 const loading = ref(false)
 const items = ref([])
 const errorMsg = ref('')
+const actionLoadingId = ref(null)
+
+const pendingCount = computed(() => items.value.length)
 
 async function load() {
   loading.value = true
@@ -13,6 +17,7 @@ async function load() {
     const resp = await adminPendingItems({ page: 0, size: 20 })
     items.value = resp.data || []
   } catch (e) {
+    items.value = []
     errorMsg.value = e?.response?.data?.message || e?.message || '加载失败（需要 ADMIN 权限）'
   } finally {
     loading.value = false
@@ -20,202 +25,432 @@ async function load() {
 }
 
 async function approve(id) {
-  await adminAuditItem(id, { action: 'APPROVE' })
-  await load()
+  if (!id) return
+  actionLoadingId.value = id
+  errorMsg.value = ''
+  try {
+    await adminAuditItem(id, { action: 'APPROVE' })
+    await load()
+  } catch (e) {
+    errorMsg.value = e?.response?.data?.message || e?.message || '审核通过失败'
+  } finally {
+    actionLoadingId.value = null
+  }
 }
 
 async function reject(id) {
-  const reason = prompt('请输入驳回原因（可选）') || ''
-  await adminAuditItem(id, { action: 'REJECT', reason })
-  await load()
+  if (!id) return
+  try {
+    const { value } = await ElMessageBox.prompt('请输入驳回原因（可选）', '驳回商品', {
+      confirmButtonText: '确认驳回',
+      cancelButtonText: '取消',
+      inputPlaceholder: '例如：图片不清晰 / 描述不完整'
+    })
+    actionLoadingId.value = id
+    errorMsg.value = ''
+    try {
+      await adminAuditItem(id, { action: 'REJECT', reason: value || '' })
+      await load()
+    } catch (e) {
+      errorMsg.value = e?.response?.data?.message || e?.message || '驳回失败'
+    } finally {
+      actionLoadingId.value = null
+    }
+  } catch {
+  }
 }
 
 onMounted(load)
 </script>
 
 <template>
-  <div class="page admin-page">
-    <div class="pageHead">
+  <div class="admin-page">
+    <section class="hero surface-card">
       <div>
+        <div class="eyebrow">Pending Review</div>
         <div class="title">待审核商品</div>
-        <div class="sub">审核通过后将自动展示在用户端首页，驳回可附理由提高沟通效率。</div>
+        <div class="sub">保持业务逻辑不变，统一标题区、信息卡片与审核操作体验，方便快速判断与处理。</div>
       </div>
-      <div class="headRight">
-        <div class="tag">当前 {{ items.length }} 条</div>
-        <button class="ghost" type="button" :disabled="loading" @click="load">刷新列表</button>
+      <div class="heroStats">
+        <div class="statCard primary">
+          <span class="statLabel">当前待审</span>
+          <strong class="statValue">{{ pendingCount }}</strong>
+        </div>
+        <button class="ghostBtn" type="button" :disabled="loading" @click="load">
+          {{ loading ? '刷新中...' : '刷新列表' }}
+        </button>
       </div>
-    </div>
+    </section>
 
-    <div v-if="errorMsg" class="error">{{ errorMsg }}</div>
-    <div v-if="loading" class="muted">加载中...</div>
+    <div v-if="errorMsg" class="feedback error">{{ errorMsg }}</div>
+    <div v-if="loading" class="panelState">加载中...</div>
 
-    <div v-else>
-      <div v-for="it in items" :key="it.id" class="card">
-        <div class="head">
-          <div class="name">{{ it.title }}</div>
-          <div class="price">￥{{ it.price }}</div>
-        </div>
-        <div class="meta">
-          <span class="chip">分类 {{ it.category }}</span>
-          <span class="chip">成色 {{ it.conditionLevel }}</span>
-          <span class="chip">状态 {{ it.status }}</span>
-        </div>
-        <div class="desc">{{ it.description || '（无描述）' }}</div>
-        <div class="actions">
-          <button class="btn ok" type="button" @click="approve(it.id)">通过</button>
-          <button class="btn danger" type="button" @click="reject(it.id)">驳回</button>
-        </div>
+    <section v-else class="contentBlock">
+      <div v-if="items.length" class="cardGrid">
+        <article v-for="it in items" :key="it.id" class="itemCard surface-card">
+          <div class="itemTop">
+            <div class="itemMain">
+              <div class="itemTitle">{{ it.title }}</div>
+              <div class="itemMeta">
+                <span class="chip neutral">分类 {{ formatCategoryLabel(it.category) }}</span>
+                <span class="chip neutral">成色 {{ formatConditionLabel(it.conditionLevel) }}</span>
+                <span class="chip warning">状态 {{ it.status }}</span>
+              </div>
+            </div>
+            <div class="priceWrap">
+              <span class="priceLabel">建议售价</span>
+              <strong class="price">￥{{ it.price }}</strong>
+            </div>
+          </div>
+
+          <div class="descBlock">
+            <div class="descLabel">商品描述</div>
+            <div class="desc">{{ it.description || '（无描述）' }}</div>
+          </div>
+
+          <div class="actions">
+            <button class="actionBtn success" type="button" :disabled="actionLoadingId === it.id" @click="approve(it.id)">
+              {{ actionLoadingId === it.id ? '处理中...' : '通过' }}
+            </button>
+            <button class="actionBtn danger" type="button" :disabled="actionLoadingId === it.id" @click="reject(it.id)">
+              {{ actionLoadingId === it.id ? '处理中...' : '驳回' }}
+            </button>
+          </div>
+        </article>
       </div>
 
-      <div v-if="items.length === 0" class="empty">暂无待审核商品</div>
-    </div>
+      <div v-else class="emptyState surface-card">
+        <div class="emptyTitle">暂无待审核商品</div>
+        <div class="emptySub">当前审核队列为空，可以稍后刷新再看。</div>
+      </div>
+    </section>
   </div>
 </template>
 
 <style scoped>
 .admin-page {
   color: var(--admin-text);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.pageHead {
+.surface-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.96));
+  border: 1px solid var(--admin-border-soft);
+  border-radius: 22px;
+  box-shadow: var(--admin-shadow);
+}
+
+.hero {
+  padding: 22px;
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
-  gap: 12px;
-  margin: 4px 0 14px;
+  gap: 18px;
+  align-items: stretch;
 }
 
-.headRight {
-  display: flex;
+.eyebrow {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .title {
-  font-size: 22px;
+  margin-top: 12px;
+  font-size: 28px;
   font-weight: 900;
+  line-height: 1.1;
 }
 
 .sub {
-  margin-top: 4px;
+  margin-top: 8px;
+  max-width: 720px;
   color: var(--admin-muted);
-  font-size: 13px;
-}
-
-.tag {
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #dbeafe, #ccfbf1);
-  color: #0f172a;
-  border: 1px solid #bfdbfe;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.card {
-  background: var(--admin-surface);
-  border: 1px solid var(--admin-border-soft);
-  border-radius: 18px;
-  padding: 14px;
-  margin-bottom: 12px;
-  box-shadow: var(--admin-shadow);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 16px 30px rgba(37, 99, 235, 0.12);
-}
-
-.head {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.name {
-  font-weight: 900;
-}
-
-.price {
-  font-weight: 900;
-  color: #d97706;
-}
-
-.meta {
-  margin: 10px 0;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.chip {
-  font-size: 12px;
-  color: #334155;
-  border: 1px solid #dbeafe;
-  background: #f0f9ff;
-  padding: 4px 8px;
-  border-radius: 999px;
-}
-
-.desc {
   font-size: 14px;
-  line-height: 1.6;
-  color: #334155;
+  line-height: 1.7;
 }
 
-.actions {
+.heroStats {
   display: flex;
-  gap: 8px;
-  margin-top: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: stretch;
+  gap: 12px;
 }
 
-.btn {
+.statCard {
+  min-width: 132px;
+  padding: 16px 18px;
+  border-radius: 18px;
   border: 1px solid transparent;
-  padding: 8px 12px;
-  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.statCard.primary {
+  background: linear-gradient(135deg, #eff6ff, #ecfeff);
+  border-color: #bfdbfe;
+}
+
+.statLabel {
+  font-size: 12px;
+  color: #475569;
+}
+
+.statValue {
+  font-size: 26px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.ghostBtn,
+.actionBtn {
+  border-radius: 14px;
+  padding: 11px 16px;
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
-  color: #fff;
-  transition: transform 0.15s ease, filter 0.15s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
 }
 
-.btn:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.05);
-}
-
-.ok {
-  background: linear-gradient(90deg, #0ea5e9, #22c55e);
-}
-
-.danger {
-  background: linear-gradient(90deg, #f43f5e, #fb7185);
-}
-
-.ghost {
+.ghostBtn {
+  align-self: center;
   background: #ffffff;
-  border: 1px solid var(--admin-border);
+  border-color: var(--admin-border);
   color: var(--admin-text);
-  padding: 8px 12px;
-  border-radius: 12px;
 }
 
-.empty,
-.muted {
-  color: var(--admin-muted);
+.ghostBtn:hover,
+.actionBtn:hover {
+  transform: translateY(-1px);
+}
+
+.ghostBtn:disabled,
+.actionBtn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.feedback {
+  border-radius: 14px;
+  padding: 12px 14px;
   font-size: 13px;
 }
 
 .error {
-  margin: 8px 0 12px;
   color: #be123c;
   border: 1px solid #fecdd3;
   background: #fff1f2;
-  border-radius: 12px;
-  padding: 10px 12px;
+}
+
+.panelState,
+.emptyState {
+  padding: 28px 22px;
+  color: var(--admin-muted);
+}
+
+.contentBlock {
+  display: flex;
+  flex-direction: column;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.itemCard {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.itemCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px rgba(37, 99, 235, 0.12);
+}
+
+.itemTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.itemMain {
+  min-width: 0;
+}
+
+.itemTitle {
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.4;
+  color: #0f172a;
+}
+
+.itemMeta {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chip.neutral {
+  color: #334155;
+  background: #f8fafc;
+  border-color: #dbeafe;
+}
+
+.chip.warning {
+  color: #92400e;
+  background: #fef3c7;
+  border-color: #fde68a;
+}
+
+.priceWrap {
+  flex-shrink: 0;
+  min-width: 96px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.08), rgba(250, 204, 21, 0.16));
+  text-align: right;
+}
+
+.priceLabel {
+  display: block;
+  font-size: 12px;
+  color: #9a3412;
+}
+
+.price {
+  display: block;
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 900;
+  color: #c2410c;
+}
+
+.descBlock {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.descLabel {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.desc {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #334155;
+  word-break: break-word;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.actionBtn {
+  min-width: 108px;
+}
+
+.actionBtn.success {
+  background: linear-gradient(135deg, #0ea5e9, #22c55e);
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(34, 197, 94, 0.2);
+}
+
+.actionBtn.danger {
+  background: linear-gradient(135deg, #fb7185, #f43f5e);
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(244, 63, 94, 0.18);
+}
+
+.emptyState {
+  text-align: center;
+}
+
+.emptyTitle {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.emptySub {
+  margin-top: 8px;
   font-size: 13px;
+  color: var(--admin-muted);
+}
+
+@media (max-width: 900px) {
+  .hero,
+  .itemTop {
+    flex-direction: column;
+  }
+
+  .heroStats {
+    justify-content: flex-start;
+  }
+
+  .priceWrap {
+    text-align: left;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-page {
+    gap: 14px;
+  }
+
+  .hero,
+  .itemCard,
+  .panelState,
+  .emptyState {
+    padding: 18px;
+  }
+
+  .title {
+    font-size: 24px;
+  }
+
+  .actions {
+    flex-direction: column;
+  }
+
+  .actionBtn,
+  .ghostBtn {
+    width: 100%;
+  }
 }
 </style>

@@ -22,7 +22,9 @@ public class MessageController {
 
     @GetMapping
     public ApiResponse<List<ItemMessage>> list(@PathVariable long itemId) {
-        return ApiResponse.ok(messageService.listMessages(itemId));
+        var principal = SecurityUtils.currentUser();
+        Long userId = principal == null ? null : principal.getUserId();
+        return ApiResponse.ok(messageService.listMessages(userId, itemId));
     }
 
     @PostMapping
