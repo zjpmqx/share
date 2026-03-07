@@ -39,3 +39,15 @@ campus-secondhand-backend/BOOT-INF/classes/application.yml
 # 运行代码文件
 campus-secondhand-backend/运行代码.txt
 前端启动代码.txt
+
+# Trae 工作区文件
+.trae/
+**/.trae/
+
+# Windows 快捷方式
+*.lnk
+
+# 误生成的异常文件
+-secondhand-web
+-secondhand-websrcservicesapi.js*
+t'
